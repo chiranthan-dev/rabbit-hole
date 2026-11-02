@@ -15,11 +15,29 @@ export function resourceLinks(r: ResourceHint) {
   if (r.type === 'podcast') links.push({ label: 'Podcasts', href: `https://podcasts.apple.com/search?term=${q}` });
   // Put the most relevant first.
   if (r.type === 'video') links.unshift(links.splice(1, 1)[0]);
+  // A real link (from Claude's web research) goes first; searches stay as backup.
+  if (r.url) {
+    let host = 'link';
+    try {
+      host = new URL(r.url).hostname.replace(/^www\./, '');
+    } catch {
+      /* keep generic label */
+    }
+    links.unshift({ label: `Open · ${host}`, href: r.url });
+    return links.slice(0, 3);
+  }
   return links;
 }
 
 /** Offline practice: self-graded recall cards from the brief. */
 export function offlineQuiz(hole: Hole): QuizQuestion[] {
+  if (hole.quizBank?.length) {
+    // Fresh ids and a fresh order each attempt.
+    return [...hole.quizBank]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 6)
+      .map((q) => ({ ...q, id: uid('q_') }));
+  }
   const cards: QuizQuestion[] = hole.brief.concepts.map((c) => ({
     id: uid('q_'),
     prompt: `Explain “${c.term}” in your own words, with an example.`,

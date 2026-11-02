@@ -6,7 +6,9 @@ import { TopicCard } from '../components/Widgets';
 import { useStore } from '../lib/store';
 import { profileSummary, recommend, threadSuggestions } from '../lib/recommend';
 import { CATALOG, DOMAINS } from '../lib/catalog';
-import { aiEnabled } from '../lib/ai/providers';
+import { aiEnabled, isManual } from '../lib/ai/providers';
+import { ideasPrompt, parseIdeas } from '../lib/manual';
+import { ClaudeHandoff } from '../components/ClaudeHandoff';
 import { suggestTopics } from '../lib/ai/generate';
 import type { CatalogTopic, Domain, Suggestion } from '../lib/types';
 import ThoughtLine from '../bits/ThoughtLine';
@@ -28,6 +30,7 @@ export default function Discover() {
   const [query, setQuery] = useState('');
   const [domain, setDomain] = useState<Domain | 'all'>('all');
   const [loadingAI, setLoadingAI] = useState(false);
+  const [handoff, setHandoff] = useState(false);
 
   // Freeze picks until the next shuffle so cards don't jump around as you like them.
   const recs = useMemo(
@@ -126,17 +129,31 @@ export default function Discover() {
         {visible.length === 0 && <div className="empty">You’ve dismissed everything here. Shuffle for more.</div>}
       </section>
 
-      {aiEnabled(ai) && (
+      {(aiEnabled(ai) || isManual(ai)) && (
         <section className="stack lg">
           <div className="row wrap between">
             <div className="stack" style={{ gap: 4 }}>
               <h2 className="h2">Things you’d never search for</h2>
-              <span className="small muted">The AI reads your interest profile and invents unexpected bridges beyond the built-in library.</span>
+              <span className="small muted">{isManual(ai) ? 'Claude' : 'The AI'} reads your interest profile and invents unexpected bridges beyond the built-in library.</span>
             </div>
-            <button className="btn sm" onClick={askAI} disabled={loadingAI}>
-              <Icon icon={SparklesIcon} size={14} /> {aiSug ? 'Generate new ones' : 'Generate'}
+            <button className="btn sm" onClick={isManual(ai) ? () => setHandoff((h) => !h) : askAI} disabled={loadingAI}>
+              <Icon icon={SparklesIcon} size={14} /> {isManual(ai) ? 'Ask Claude for ideas' : aiSug ? 'Generate new ones' : 'Generate'}
             </button>
           </div>
+          {isManual(ai) && handoff && (
+            <div className="card fade-in">
+              <ClaudeHandoff
+                prompt={ideasPrompt(profileSummary(profile, holes), profile.adventurousness)}
+                submitLabel="Add these ideas"
+                onSubmit={(text) => {
+                  const items = parseIdeas(text);
+                  setAISuggestions(items);
+                  setHandoff(false);
+                  toast(`${items.length} new ideas from Claude.`);
+                }}
+              />
+            </div>
+          )}
           {loadingAI && <ThoughtLine label="Dreaming up rabbit holes" working steps={['Reading your interests', 'Looking for strange bridges', 'Writing hooks']} color="#ffd9c7" glyphColor="#FF6D29" />}
           {aiSug && !loadingAI && (
             <div className="grid three">

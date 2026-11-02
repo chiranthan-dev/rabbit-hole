@@ -85,7 +85,9 @@ async function ollamaChat(s: AISettings, req: ChatRequest): Promise<unknown> {
     if ((e as Error).name === 'AbortError') throw e;
     throw new AIError(
       `Couldn't reach Ollama at ${base}.`,
-      'Make sure Ollama is running (`ollama serve`) and the URL in Settings is right. When running the app with `npm run dev`, the URL `/ollama` avoids browser CORS issues.',
+      location.hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)
+        ? 'Make sure Ollama is running (`ollama serve`) and the URL in Settings is right. When running the app with `npm run dev`, the URL `/ollama` avoids browser CORS issues.'
+        : 'Local models only work when you run the app on your laptop (`npm run dev`). On the hosted site, use “Claude.ai (copy & paste)” in Settings.',
     );
   }
   if (!res.ok) {
@@ -240,7 +242,9 @@ export async function chatJSON<T = unknown>(s: AISettings, req: ChatRequest, ret
 }
 
 export const providerLabel = (s: AISettings) =>
-  s.provider === 'ollama'
+  s.provider === 'manual'
+    ? 'Claude.ai (copy & paste)'
+    : s.provider === 'ollama'
     ? `Ollama · ${s.ollama.model}`
     : s.provider === 'openai'
       ? `OpenAI-compatible · ${s.openai.model}`
@@ -248,7 +252,9 @@ export const providerLabel = (s: AISettings) =>
         ? `Claude · ${s.anthropic.model}`
         : 'Offline library';
 
-export const aiEnabled = (s: AISettings) => s.provider !== 'offline';
+/** True when the app can call a model by itself (not offline, not copy-paste). */
+export const aiEnabled = (s: AISettings) => s.provider === 'ollama' || s.provider === 'openai' || s.provider === 'anthropic';
+export const isManual = (s: AISettings) => s.provider === 'manual';
 
 /** Quick health check used by Settings. */
 export async function testConnection(s: AISettings): Promise<string> {

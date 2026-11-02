@@ -8,9 +8,10 @@ import type { AISettings, ProviderKind } from '../lib/types';
 import { downloadText, isoDate } from '../lib/util';
 
 const PROVIDERS: { id: ProviderKind; label: string; text: string }[] = [
-  { id: 'ollama', label: 'Ollama (local)', text: 'Runs on your laptop. Free and private. Default: Qwen.' },
+  { id: 'manual', label: 'Claude.ai — copy & paste', text: 'Recommended. Claude researches the web using your own Claude account; you paste its reply back. No keys, no cost, works on phone.' },
+  { id: 'ollama', label: 'Ollama (local)', text: 'Runs Qwen on your laptop. Only works when you run the app locally (npm run dev).' },
   { id: 'openai', label: 'OpenAI-compatible', text: 'LM Studio, llama.cpp, OpenAI, Groq, OpenRouter…' },
-  { id: 'anthropic', label: 'Claude', text: 'Best quality, with live web research. Needs an API key.' },
+  { id: 'anthropic', label: 'Claude API (automatic)', text: 'Same quality, no copy-paste — but needs an API key and is billed per use.' },
   { id: 'offline', label: 'Offline', text: 'No AI. Plans come from the built-in library templates.' },
 ];
 
@@ -155,7 +156,15 @@ export default function Settings() {
           </div>
         )}
 
-        {ai.provider !== 'offline' && (
+        {ai.provider === 'manual' && (
+          <div className="small grey stack" style={{ gap: 6 }}>
+            <span>
+              When you start a rabbit hole, Rabbit Hole writes a prompt with your topic and daily time. You paste it into Claude (claude.ai or the app), Claude searches the web and replies with a file, and you paste or upload it back. Turn on <b>web search</b> in Claude for real, current sources.
+            </span>
+            <span>Questions, explanation feedback, recaps and topic ideas work the same way.</span>
+          </div>
+        )}
+        {ai.provider !== 'offline' && ai.provider !== 'manual' && (
           <>
             <div className="stack" style={{ gap: 6 }}>
               <div className="row between small">

@@ -43,7 +43,7 @@ const defaultProfile: Profile = {
 };
 
 export const defaultAI: AISettings = {
-  provider: 'ollama',
+  provider: 'manual',
   ollama: { baseUrl: '/ollama', model: 'qwen2.5:7b' },
   openai: { baseUrl: '/lmstudio/v1', model: 'qwen2.5-7b-instruct', apiKey: '' },
   anthropic: { apiKey: '', model: 'claude-opus-5-5', webSearch: true },

@@ -6,7 +6,9 @@ import { useStore } from '../lib/store';
 import { recommend } from '../lib/recommend';
 import { domainEmoji, domainLabel } from '../lib/catalog';
 import { createHole, type Step } from '../lib/create';
-import { aiEnabled, providerLabel } from '../lib/ai/providers';
+import { aiEnabled, isManual, providerLabel } from '../lib/ai/providers';
+import { parseWeek, weekPrompt, type WeekArgs } from '../lib/manual';
+import { ClaudeHandoff } from '../components/ClaudeHandoff';
 import { KIND_META } from '../lib/planner';
 import type { CatalogTopic, Depth, Hole, LearningStyle } from '../lib/types';
 import { addDays, fmtMinutes, isoDate, parseDate, weekdayShort } from '../lib/util';
@@ -41,17 +43,26 @@ export default function NewHole() {
   const ai = useStore((s) => s.ai);
   const addHole = useStore((s) => s.addHole);
 
-  const initialEntry = loc.state?.topic && !loc.state.topic.id.startsWith('thread-') && !loc.state.topic.id.startsWith('trail-') ? loc.state.topic : undefined;
-  const initialText = loc.state?.custom ?? loc.state?.topic?.title ?? '';
+  // On phones, switching to the Claude app can reload this tab — keep the wizard as a draft.
+  const [draft] = useState(() => {
+    if (loc.state) {
+      clearDraft(); // a fresh start from Discover/Today replaces any old draft
+      return null;
+    }
+    return loadDraft();
+  });
+  const initialEntry = draft ? draft.entry : loc.state?.topic && !loc.state.topic.id.startsWith('thread-') && !loc.state.topic.id.startsWith('trail-') ? loc.state.topic : undefined;
+  const initialText = draft ? draft.topic : loc.state?.custom ?? loc.state?.topic?.title ?? '';
   const [entry, setEntry] = useState<CatalogTopic | undefined>(initialEntry);
   const [topic, setTopic] = useState(initialText);
-  const [step, setStep] = useState(initialText ? 1 : 0);
-  const [angle, setAngle] = useState(loc.state?.topic?.id.startsWith('thread-') ? loc.state.topic.questions[0] ?? '' : '');
-  const [depth, setDepth] = useState<Depth>('committed');
-  const [style, setStyle] = useState<LearningStyle>(profile.style);
-  const [startDate, setStartDate] = useState(isoDate());
+  const [step, setStep] = useState(draft ? 3 : initialText ? 1 : 0);
+  const [angle, setAngle] = useState(draft ? draft.angle ?? '' : loc.state?.topic?.id.startsWith('thread-') ? loc.state.topic.questions[0] ?? '' : '');
+  const [depth, setDepth] = useState<Depth>(draft?.depth ?? 'committed');
+  const [style, setStyle] = useState<LearningStyle>(draft?.style ?? profile.style);
+  const [startDate, setStartDate] = useState(draft?.startDate ?? isoDate());
   const [perDay, setPerDay] = useState(profile.defaultMinutes);
-  const [budgets, setBudgets] = useState<number[]>(() => Array(7).fill(profile.defaultMinutes));
+  const [budgets, setBudgets] = useState<number[]>(() => draft?.budgets ?? Array(7).fill(profile.defaultMinutes));
+  const manual = isManual(ai);
   const [steps, setSteps] = useState<Step[]>([]);
   const [result, setResult] = useState<{ hole: Hole; warnings: string[] } | null>(null);
   const [error, setError] = useState('');
@@ -72,23 +83,26 @@ export default function NewHole() {
       }),
     );
 
+  const interests = Object.entries(profile.tagAffinity)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([t]) => t);
+  const args: WeekArgs = { topic: topic.trim(), entry, angle: angle.trim() || undefined, depth, style, budgets, startDate, interests };
+
   const generate = async () => {
     setStep(3);
     setError('');
     setSteps([]);
     setResult(null);
+    if (manual) {
+      saveDraft(args);
+      // Drop the navigation state so a reload (e.g. after switching to the Claude app) restores the draft.
+      nav('/new', { replace: true, state: null });
+      return;
+    }
     abort.current = new AbortController();
     try {
-      const interests = Object.entries(profile.tagAffinity)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 6)
-        .map(([t]) => t);
-      const r = await createHole(
-        ai,
-        { topic: topic.trim(), entry, angle: angle.trim() || undefined, depth, style, budgets, startDate, interests },
-        setSteps,
-        abort.current.signal,
-      );
+      const r = await createHole(ai, args, setSteps, abort.current.signal);
       setResult(r);
       setStep(4);
     } catch (e) {
@@ -103,6 +117,7 @@ export default function NewHole() {
   const begin = () => {
     if (!result) return;
     addHole(result.hole);
+    clearDraft();
     toast('Down the rabbit hole you go 🕳️');
     nav('/');
   };
@@ -259,7 +274,8 @@ export default function NewHole() {
           <div className="card flat small row wrap between">
             <span className="muted">
               Planner: <b className="grey">{providerLabel(ai)}</b>
-              {!aiEnabled(ai) && ' — using templates from the offline library.'}
+              {manual && ' — you’ll paste a prompt into Claude, which researches the web and sends back your week.'}
+              {!aiEnabled(ai) && !manual && ' — using templates from the offline library.'}
             </span>
             <button className="btn sm ghost" onClick={() => nav('/settings')}>
               Change
@@ -270,13 +286,46 @@ export default function NewHole() {
               <Icon icon={ArrowLeft01Icon} size={14} /> Back
             </button>
             <button className="btn primary lg" disabled={total === 0} onClick={generate}>
-              Research & plan my week <Icon icon={Rocket01Icon} size={16} />
+              {manual ? 'Get my week from Claude' : 'Research & plan my week'} <Icon icon={Rocket01Icon} size={16} />
             </button>
           </div>
         </div>
       )}
 
-      {step === 3 && (
+      {step === 3 && manual && (
+        <div className="card stack lg fade-in">
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="h2">Let Claude do the research</div>
+            <div className="small muted">
+              The prompt includes your topic, angle, depth and the exact minutes for each day. Claude searches the web and replies with your whole week as a file.
+            </div>
+          </div>
+          <ClaudeHandoff
+            prompt={weekPrompt(args)}
+            submitLabel="Build my week"
+            pastePlaceholder="Paste Claude’s reply here (the JSON) — or upload the file it gave you."
+            onSubmit={(text) => {
+              const r = parseWeek(text, args);
+              setResult(r);
+              setStep(4);
+            }}
+          />
+          <div className="row between">
+            <button
+              className="btn"
+              onClick={() => {
+                clearDraft();
+                setStep(2);
+              }}
+            >
+              <Icon icon={ArrowLeft01Icon} size={14} /> Back
+            </button>
+            <span className="tiny faint">Your choices are saved, so it’s fine to switch apps.</span>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && !manual && (
         <div className="card stack lg fade-in">
           <LatticeLoader
             label={error ? 'Something went wrong' : 'Digging the tunnel'}
@@ -324,6 +373,32 @@ export default function NewHole() {
       {step === 4 && result && <Review result={result} onBegin={begin} onRegenerate={generate} onBack={() => setStep(2)} />}
     </div>
   );
+}
+
+const DRAFT_KEY = 'rabbit-hole-draft';
+function saveDraft(a: WeekArgs) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...a, savedAt: Date.now() }));
+  } catch {
+    /* storage unavailable */
+  }
+}
+function loadDraft(): WeekArgs | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null');
+    // Drafts expire after a day.
+    if (!d || Date.now() - d.savedAt > 86_400_000) return null;
+    return d as WeekArgs;
+  } catch {
+    return null;
+  }
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 function Review({ result, onBegin, onRegenerate, onBack }: { result: { hole: Hole; warnings: string[] }; onBegin: () => void; onRegenerate: () => void; onBack: () => void }) {

@@ -6,7 +6,9 @@ Rabbit Hole is a weekly learning challenge. You pick something you're curious ab
 
 ## Quick start
 
-You need **Node 20+**. For AI planning you also need **[Ollama](https://ollama.com)** with a Qwen model (or see *AI engines* below).
+**Just want to use it?** Deploy it to Vercel (below) and open the link on your laptop and phone. The default AI engine is **Claude.ai copy & paste**, which needs nothing installed.
+
+To run it locally you need **Node 20+**. Ollama with Qwen is optional (see *AI engines*).
 
 ```bash
 npm install
@@ -67,15 +69,34 @@ Preview serves on port 4173 and keeps the `/ollama` proxy working.
 
 **Phone view:** `/m` is the minimal checklist. Swipe a task left to finish it, tap it for details. It's an installable PWA, and the manifest opens straight to `/m`.
 
-## AI engines: is Qwen good enough?
+## Deploy to Vercel
+
+1. Go to <https://vercel.com/new> and sign in with GitHub.
+2. Import **chiranthan-dev/rabbit-hole**. If it isn't listed, choose *Adjust GitHub App Permissions* and give Vercel access to the repo.
+3. Leave everything as detected. `vercel.json` already sets Vite, `npm run build` and `dist`. Click **Deploy**.
+4. You get a link like `https://rabbit-hole-xxxx.vercel.app`. Open it on your laptop, and on your phone use **Add to Home Screen** (Safari: Share button; Chrome: ⋮ menu).
+
+Every push to the production branch redeploys automatically.
+
+## The Claude copy & paste flow (default)
+
+1. When you start a rabbit hole, the app writes a prompt with your topic, angle, depth and the minutes for each day.
+2. **Copy prompt & open Claude** copies it and opens claude.ai. Turn on web search in Claude, then send it.
+3. Claude researches and replies with your whole week as JSON (a file or a code block).
+4. Paste the reply or upload the file. The app checks it, trims any day that's over your time, keeps the real links Claude found, and saves Claude's quiz questions for Practice.
+
+Answers to parked questions, feedback on your explanations, the week recap and new topic ideas work the same way. Your wizard choices are saved, so switching to the Claude app on your phone and back is fine.
+
+## AI engines
 
 All AI calls go through one interface (`src/lib/ai/providers.ts`). Changing engines is a setting, not a code change.
 
 | Engine | Setup | Quality |
 |---|---|---|
-| **Ollama** (default) | `ollama pull qwen2.5:7b`, URL `/ollama` | 7B/8B works; **Qwen 2.5 14B / Qwen 3 14B** are noticeably better if you have ~10 GB+ of memory. 3B and below gets generic. |
+| **Claude.ai copy & paste** (default) | Nothing; uses your Claude account | Best quality with real web sources. One copy-paste per week. |
+| **Ollama** | Only when running locally: `ollama pull qwen2.5:7b`, URL `/ollama` | 7B/8B works; **Qwen 2.5 14B / Qwen 3 14B** are noticeably better if you have ~10 GB+ of memory. 3B and below gets generic. |
 | **OpenAI-compatible** | LM Studio (`/lmstudio/v1`), OpenAI, Groq, OpenRouter… | Depends on the model. |
-| **Claude** | Paste an Anthropic API key | Best quality. Optionally **researches the live web** before planning, so sources are real and current. |
+| **Claude API** | Paste an Anthropic API key (billed per use) | Best quality. Optionally **researches the live web** before planning, so sources are real and current. |
 | **Offline** | Nothing | Curated library and templates. Free, but generic for custom topics. |
 
 How the app keeps a small model on track:
@@ -98,6 +119,7 @@ src/
     planner.ts       learning arc, budget fitting, offline planner, rebalance, revisits
     recommend.ts     the interest / serendipity algorithm
     create.ts        topic → research → arc → daily tasks (AI with offline fallback)
+    manual.ts        Claude copy & paste: prompts + importer for the JSON Claude sends back
     ai/providers.ts  Ollama, OpenAI-compatible, Claude; JSON repair; detect + test
     ai/generate.ts   prompts + schemas: brief, day plan, quiz, feedback, answers, recap, suggestions
     store.ts         zustand store (persisted to localStorage) + learning signals
@@ -122,10 +144,7 @@ Built from the brand sheet. Ink `#161316`, brown `#453027`, orange `#FF6D29`, gr
 ## Notes & next steps
 
 - **Data is stored per browser.** Your phone and laptop don't sync yet. Use **Settings → Export / Import** to move data between them. Syncing is the main job of the "deploy to phone" step.
-- To try the phone view on your network now:
-  1. Run `npm run dev`. The dev server already listens on your network.
-  2. On your phone, open `http://<laptop-ip>:5173/m`.
-  3. Use the browser's *Add to Home Screen*.
+- The hosted version can't reach Ollama on your laptop. Use the copy & paste flow there.
 
 ## Credits
 

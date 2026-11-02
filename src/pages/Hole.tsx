@@ -18,7 +18,9 @@ import { useStore } from '../lib/store';
 import { dayProgress, holeProgress, KIND_META, rebalance, rebudget, TASK_KINDS, todayIndex } from '../lib/planner';
 import { domainEmoji, domainLabel } from '../lib/catalog';
 import { holeMarkdown, offlineQuiz, resourceLinks } from '../lib/extras';
-import { aiEnabled } from '../lib/ai/providers';
+import { aiEnabled, isManual } from '../lib/ai/providers';
+import { explainPrompt, questionPrompt, recapPrompt } from '../lib/manual';
+import { ClaudeHandoff } from '../components/ClaudeHandoff';
 import { answerQuestion, explainFeedback, makeQuiz, planDay, weekRecap } from '../lib/ai/generate';
 import type { Concept, Hole, QuizAttempt, TaskKind } from '../lib/types';
 import { clamp, downloadText, fmtMinutes, prettyDate, slug, uid, weekdayShort } from '../lib/util';
@@ -431,6 +433,7 @@ function QuestionsTab({ hole }: { hole: Hole }) {
   const nav = useNavigate();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [claudeFor, setClaudeFor] = useState<string | null>(null);
   const ti = clamp(todayIndex(hole), 0, 6);
 
   const ask = async (qid: string, q: string) => {
@@ -497,6 +500,11 @@ function QuestionsTab({ hole }: { hole: Hole }) {
                 <Icon icon={SparklesIcon} size={14} /> {q.answer ? 'Ask again' : 'Ask the AI'}
               </button>
             )}
+            {isManual(ai) && (
+              <button className="btn sm" onClick={() => setClaudeFor(claudeFor === q.id ? null : q.id)}>
+                <Icon icon={SparklesIcon} size={14} /> {q.answer ? 'Ask Claude again' : 'Ask Claude'}
+              </button>
+            )}
             <button className="btn sm" onClick={() => patchQuestion(hole.id, q.id, { resolved: !q.resolved })}>
               <Icon icon={Tick02Icon} size={14} /> {q.resolved ? 'Reopen' : 'Answered it myself'}
             </button>
@@ -504,6 +512,22 @@ function QuestionsTab({ hole }: { hole: Hole }) {
               Make it a rabbit hole <Icon icon={ArrowRight01Icon} size={14} />
             </button>
           </div>
+          {claudeFor === q.id && (
+            <div className="card flat fade-in">
+              <ClaudeHandoff
+                compact
+                steps={false}
+                prompt={questionPrompt(hole, q.text)}
+                submitLabel="Save answer"
+                pastePlaceholder="Optional: paste Claude’s answer here to keep it with your notes."
+                onSubmit={(text) => {
+                  patchQuestion(hole.id, q.id, { answer: text.trim() });
+                  setClaudeFor(null);
+                  toast('Answer saved.');
+                }}
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -568,7 +592,11 @@ function Quiz({ hole }: { hole: Hole }) {
         <div className="card stack">
           <div className="h2">Test yourself</div>
           <div className="small muted">
-            Retrieval practice — pulling knowledge out of your head — is one of the most effective ways to learn. {aiEnabled(ai) ? 'The AI writes questions that test understanding, not trivia.' : 'Offline mode uses recall cards from your key ideas; you mark yourself.'}
+            Retrieval practice — pulling knowledge out of your head — is one of the most effective ways to learn. {aiEnabled(ai)
+              ? 'The AI writes questions that test understanding, not trivia.'
+              : hole.quizBank?.length
+                ? `Claude wrote ${hole.quizBank.length} questions for this week — each quiz draws 6 of them.`
+                : 'Recall cards from your key ideas; you mark yourself.'}
           </div>
           {loading ? (
             <ThoughtLine label="Writing your quiz" working steps={['Reading key ideas', 'Finding misconceptions', 'Writing questions']} color="#ffd9c7" glyphColor="#FF6D29" />
@@ -759,6 +787,12 @@ function Explain({ hole }: { hole: Hole }) {
           <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={text.trim().length < 20} onClick={submit}>
             {aiEnabled(ai) ? 'Get feedback' : 'Save explanation'}
           </button>
+        )}
+        {isManual(ai) && text.trim().length >= 20 && (
+          <div className="card flat stack">
+            <div className="small">Want a tutor’s eye on it? Send your explanation to Claude for honest feedback.</div>
+            <ClaudeHandoff compact steps={false} prompt={explainPrompt(hole, conceptName, text)} />
+          </div>
         )}
       </div>
       <div className="stack lg">
@@ -979,7 +1013,26 @@ function FinishTab({ hole }: { hole: Hole }) {
         {hole.recap ? (
           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{hole.recap}</p>
         ) : (
-          <div className="small muted">{aiEnabled(ai) ? 'Let the AI read your notes and write a recap of your week.' : 'Turn on an AI engine in Settings for an automatic recap. Your notes are always exportable.'}</div>
+          <div className="small muted">
+            {aiEnabled(ai)
+              ? 'Let the AI read your notes and write a recap of your week.'
+              : isManual(ai)
+                ? 'Send your notes to Claude for a recap of your week, then paste it here to keep it.'
+                : 'Turn on an AI engine in Settings for an automatic recap. Your notes are always exportable.'}
+          </div>
+        )}
+        {isManual(ai) && (
+          <ClaudeHandoff
+            compact
+            steps={false}
+            prompt={recapPrompt(hole)}
+            submitLabel="Save recap"
+            pastePlaceholder="Paste Claude’s recap here."
+            onSubmit={(text) => {
+              updateHole(hole.id, (h) => ({ ...h, recap: text.trim() }));
+              toast('Recap saved.');
+            }}
+          />
         )}
         {next.length > 0 && (
           <div className="stack" style={{ gap: 6 }}>

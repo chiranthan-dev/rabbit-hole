@@ -37,6 +37,8 @@ export interface ResourceHint {
   title: string;
   /** What to type into a search box. We build links from this instead of trusting model-made URLs. */
   query: string;
+  /** A real link — only present when it came from a web-searching assistant. */
+  url?: string;
   type?: 'article' | 'video' | 'book' | 'paper' | 'podcast' | 'tool' | 'course' | 'other';
 }
 
@@ -163,6 +165,8 @@ export interface Hole {
   quizzes: QuizAttempt[];
   explanations: Explanation[];
   recap?: string;
+  /** Questions written up-front (e.g. by Claude in the copy-paste flow). */
+  quizBank?: QuizQuestion[];
   final?: FinalReflection;
   source: 'ai' | 'offline';
   model?: string;
@@ -213,7 +217,7 @@ export interface Suggestion {
 
 // ----- AI settings -----
 
-export type ProviderKind = 'ollama' | 'openai' | 'anthropic' | 'offline';
+export type ProviderKind = 'manual' | 'ollama' | 'openai' | 'anthropic' | 'offline';
 
 export interface AISettings {
   provider: ProviderKind;
