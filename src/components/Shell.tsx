@@ -3,6 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { Home09Icon, Compass01Icon, Archive01Icon, User03Icon, Settings02Icon } from '@hugeicons/core-free-icons';
 import { Icon, Toasts } from './ui';
 import { useStore } from '../lib/store';
+import { SyncDot } from './SyncPanel';
 
 const Grainient = lazy(() => import('../bits/Grainient'));
 
@@ -56,14 +57,17 @@ export function Shell({ children }: { children: ReactNode }) {
             Rabbit Hole <small className="hide-sm">· one topic, one week</small>
           </span>
         </Link>
-        <nav className="nav" aria-label="Main">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end}>
-              <Icon icon={n.icon} size={16} />
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
+        <div className="row" style={{ gap: 14 }}>
+          <SyncDot />
+          <nav className="nav" aria-label="Main">
+            {NAV.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end}>
+                <Icon icon={n.icon} size={16} />
+                {n.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
       </header>
       <main className="main">{children}</main>
       <nav className="tabbar" aria-label="Main">

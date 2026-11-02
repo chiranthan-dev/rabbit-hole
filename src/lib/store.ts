@@ -52,6 +52,23 @@ export const defaultAI: AISettings = {
 
 const defaultUI: UISettings = { motion: 'full', background: 'animated', sounds: false };
 
+/** When each part of your data last changed on this device (ms). Used to merge across devices. */
+export interface SyncMeta {
+  profileAt: number;
+  holesAt: Record<string, number>;
+  deleted: Record<string, number>;
+  savedAt: number;
+  activeAt: number;
+  ideasAt: number;
+}
+export interface SyncState {
+  code?: string;
+  version: number;
+  lastSyncAt?: string;
+  meta: SyncMeta;
+}
+export const emptyMeta = (): SyncMeta => ({ profileAt: 0, holesAt: {}, deleted: {}, savedAt: 0, activeAt: 0, ideasAt: 0 });
+
 interface State {
   profile: Profile;
   holes: Hole[];
@@ -61,6 +78,8 @@ interface State {
   savedTopics: CatalogTopic[];
   aiSuggestions: { at: string; items: (CatalogTopic & { why: string })[] } | null;
   discoverSeed: number;
+  sync: SyncState;
+  setSync: (p: Partial<SyncState>) => void;
 
   // profile & signals
   setProfile: (p: Partial<Profile>) => void;
@@ -118,6 +137,8 @@ export const useStore = create<State>()(
         savedTopics: [],
         aiSuggestions: null,
         discoverSeed: Math.floor(Math.random() * 1e9),
+        sync: { version: 0, meta: emptyMeta() },
+        setSync: (p) => set((s) => ({ sync: { ...s.sync, ...p } })),
 
         setProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
         onboard: ({ name, domains, adventurousness, minutes, style }) =>
@@ -256,7 +277,8 @@ export const useStore = create<State>()(
           });
         },
         resetAll: () =>
-          set({ profile: defaultProfile, holes: [], activeHoleId: undefined, savedTopics: [], aiSuggestions: null, ai: defaultAI, ui: defaultUI }),
+          // Also disconnects sync on this device, so erasing here never erases your other devices.
+          set({ profile: defaultProfile, holes: [], activeHoleId: undefined, savedTopics: [], aiSuggestions: null, ai: defaultAI, ui: defaultUI, sync: { version: 0, meta: emptyMeta() } }),
       };
     },
     {

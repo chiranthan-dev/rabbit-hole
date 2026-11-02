@@ -1,4 +1,41 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { handleSync, memoryKV, redisKV } from './api/sync';
+
+// Serves /api/sync during `npm run dev` / `npm run preview`, just like the
+// Vercel Function does in production. Uses Upstash if its env vars are in
+// .env.local, otherwise an in-memory store (handy for trying sync on LAN).
+function localSyncApi(): Plugin {
+  let kv: ReturnType<typeof memoryKV> | null = null;
+  const handler = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    if (!req.url?.startsWith('/api/sync')) return next();
+    const chunks: Buffer[] = [];
+    for await (const c of req) chunks.push(c as Buffer);
+    const body = chunks.length ? Buffer.concat(chunks).toString('utf8') : undefined;
+    const request = new Request(`http://localhost${req.url}`, {
+      method: req.method,
+      headers: req.headers as Record<string, string>,
+      body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
+    });
+    const response = await handleSync(request, kv);
+    res.statusCode = response.status;
+    response.headers.forEach((v, k) => res.setHeader(k, v));
+    res.end(await response.text());
+  };
+  return {
+    name: 'local-sync-api',
+    configResolved(config) {
+      const env = loadEnv(config.mode, process.cwd(), '');
+      kv = redisKV(env) ?? memoryKV();
+    },
+    configureServer(server) {
+      server.middlewares.use(handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handler);
+    },
+  };
+}
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -19,6 +56,7 @@ const proxy = {
 
 export default defineConfig({
   plugins: [
+    localSyncApi(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -40,7 +78,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallbackDenylist: [/^\/ollama/, /^\/lmstudio/],
+        navigateFallbackDenylist: [/^\/ollama/, /^\/lmstudio/, /^\/api\//],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),

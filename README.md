@@ -58,7 +58,7 @@ Preview serves on port 4173 and keeps the `/ollama` proxy working.
 - **Change my time:** resize the rest of the week. **Replan:** regenerate any single day with AI.
 
 **Discovery & the interest algorithm** (`src/lib/recommend.ts`)
-- 70 hand-picked topics across 17 domains, each tagged with cross-cutting themes (systems, perception, networks…).
+- 119 hand-picked topics across 20 domains, each tagged with cross-cutting themes (systems, perception, networks…). The domains include **Self-growth** (habits, self-compassion, negotiation, decisions, meaning…), **Fictional worlds** (Tolkien's languages, the Cosmere, Earthsea, Dune, Discworld, Malazan, myths, fairy tales…) and **Training & endurance** (Ironman training, zone 2 / 80-20, race fuelling, swimming, recovery, VO₂ max…).
 - Every suggestion is one of three kinds, and the card says why it was picked:
   - **Down your alley:** high affinity with the domains and themes you like.
   - **One hop over:** a *bridge* into a domain you barely know, through a theme that often appears alongside one you love.
@@ -75,8 +75,28 @@ Preview serves on port 4173 and keeps the `/ollama` proxy working.
 2. Import **chiranthan-dev/rabbit-hole**. If it isn't listed, choose *Adjust GitHub App Permissions* and give Vercel access to the repo.
 3. Leave everything as detected. `vercel.json` already sets Vite, `npm run build` and `dist`. Click **Deploy**.
 4. You get a link like `https://rabbit-hole-xxxx.vercel.app`. Open it on your laptop, and on your phone use **Add to Home Screen** (Safari: Share button; Chrome: ⋮ menu).
+5. **Add the database for sync:**
+   1. In the Vercel project, go to **Storage → Create Database → Upstash (Redis)**. The free plan is enough.
+   2. Click **Connect** to this project. This adds the `KV_REST_API_*` / `UPSTASH_REDIS_REST_*` environment variables.
+   3. Go to **Deployments → ⋯ → Redeploy** so the variables take effect.
+   
+   You can connect the same Upstash database to your other Vercel apps. Rabbit Hole only uses keys that start with `rh:`.
 
 Every push to the production branch redeploys automatically.
+
+## Sync across devices
+
+1. On your laptop: **Settings → Sync across devices → Turn on sync**.
+2. On your phone: scan the QR code with the camera, or open the copied link. It links straight away, with no account needed.
+
+After that, changes sync within a couple of seconds, plus whenever you switch back to the app. If both devices changed things, the changes are merged: the newest version of each hole and of your profile wins, and deletions are remembered.
+
+The sync code is the only key to your data. Keep it private; you can turn sync off per device at any time. API keys never sync.
+
+How it works:
+- `api/sync.ts` is a Vercel Function. It stores one versioned JSON snapshot per hashed code in Upstash and rejects stale writes.
+- `src/lib/sync.ts` tracks changes on each device and merges them.
+- `npm run dev` runs the same API locally with an in-memory store. Put the Upstash variables in `.env.local` to use the real database instead.
 
 ## The Claude copy & paste flow (default)
 
@@ -112,10 +132,12 @@ Your API keys stay in your browser's storage and are never included in exports.
 ## Project layout
 
 ```
+api/
+  sync.ts            Vercel Function for sync (Upstash Redis)
 src/
   lib/
     types.ts         domain model
-    catalog.ts       70 curated topics, 17 domains
+    catalog.ts       119 curated topics, 20 domains
     planner.ts       learning arc, budget fitting, offline planner, rebalance, revisits
     recommend.ts     the interest / serendipity algorithm
     create.ts        topic → research → arc → daily tasks (AI with offline fallback)
@@ -123,6 +145,7 @@ src/
     ai/providers.ts  Ollama, OpenAI-compatible, Claude; JSON repair; detect + test
     ai/generate.ts   prompts + schemas: brief, day plan, quiz, feedback, answers, recap, suggestions
     store.ts         zustand store (persisted to localStorage) + learning signals
+    sync.ts          cross-device sync: change tracking, merge, push/pull
   pages/             Today, NewHole, Hole (week/brief/questions/practice/journal/wrap-up),
                      Discover, History, You, Settings, Onboarding, Mobile (/m)
   components/        Shell, TaskItem (+ focus timer), widgets (depth meter, week strip, topic card)
@@ -143,7 +166,6 @@ Built from the brand sheet. Ink `#161316`, brown `#453027`, orange `#FF6D29`, gr
 
 ## Notes & next steps
 
-- **Data is stored per browser.** Your phone and laptop don't sync yet. Use **Settings → Export / Import** to move data between them. Syncing is the main job of the "deploy to phone" step.
 - The hosted version can't reach Ollama on your laptop. Use the copy & paste flow there.
 
 ## Credits

@@ -11,6 +11,8 @@ import You from './pages/You';
 import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import Mobile from './pages/Mobile';
+import LinkDevice from './pages/LinkDevice';
+import { startSync } from './lib/sync';
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -23,6 +25,7 @@ function ScrollTop() {
 function Routed() {
   const onboarded = useStore((s) => s.profile.onboarded);
   const { pathname } = useLocation();
+  if (pathname === '/link') return <LinkDevice />;
   if (!onboarded && pathname !== '/welcome' && pathname !== '/m') return <Navigate to="/welcome" replace />;
   if (pathname === '/m') return <Mobile />;
   if (pathname === '/welcome') return <Onboarding />;
@@ -67,6 +70,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }
 }
 
 export default function App() {
+  useEffect(() => startSync(), []);
   return (
     <ErrorBoundary>
     <BrowserRouter>

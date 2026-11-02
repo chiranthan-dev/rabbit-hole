@@ -17,7 +17,10 @@ export type Domain =
   | 'body'
   | 'design'
   | 'society'
-  | 'craft';
+  | 'craft'
+  | 'growth'
+  | 'worlds'
+  | 'sport';
 
 export type TaskKind =
   | 'read'

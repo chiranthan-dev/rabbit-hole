@@ -1,7 +1,7 @@
 // The phone view: today's checklist and nothing else.
 // Swipe a task left to finish or skip it; tap it for the details.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Maximize01Icon } from '@hugeicons/core-free-icons';
 import { Background } from '../components/Shell';
@@ -13,6 +13,7 @@ import type { Task } from '../lib/types';
 import SwipeRow from '../bits/SwipeRow';
 import SpringCheck from '../bits/SpringCheck';
 import { resourceLinks } from '../lib/extras';
+import { SyncDot } from '../components/SyncPanel';
 
 export default function Mobile() {
   const hole = useActiveHole();
@@ -21,6 +22,7 @@ export default function Mobile() {
   const patchTask = useStore((s) => s.patchTask);
   const motion = useStore((s) => s.ui.motion);
   const [detail, setDetail] = useState<Task | null>(null);
+  const tap = useRef<{ x: number; y: number; t: number } | null>(null);
 
   if (!hole)
     return (
@@ -58,9 +60,12 @@ export default function Mobile() {
           <span className="row" style={{ gap: 8 }}>
             <span className="brand-mark" style={{ width: 18, height: 18 }} /> Rabbit Hole
           </span>
-          <Link to="/" className="btn icon sm ghost" aria-label="Open full app">
-            <Icon icon={Maximize01Icon} size={16} />
-          </Link>
+          <span className="row" style={{ gap: 10 }}>
+            <SyncDot />
+            <Link to="/" className="btn icon sm ghost" aria-label="Open full app">
+              <Icon icon={Maximize01Icon} size={16} />
+            </Link>
+          </span>
         </div>
 
         <div className="stack" style={{ gap: 4 }}>
@@ -88,8 +93,18 @@ export default function Mobile() {
         {open.length > 0 && <div className="tiny faint">Swipe left to finish · tap for details</div>}
         <div className="stack" style={{ gap: 10 }}>
           {open.map((t) => (
-            <SwipeRow
+            <div
               key={t.id}
+              // The swipe row captures the pointer while dragging, so detect a plain tap here (works for mouse and touch).
+              onPointerDownCapture={(e) => (tap.current = { x: e.clientX, y: e.clientY, t: Date.now() })}
+              onPointerUpCapture={(e) => {
+                const d = tap.current;
+                // Touch taps already produce a click on the button; this path is for mouse/pen.
+                if (e.pointerType !== 'touch' && d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 8 && Date.now() - d.t < 500) setDetail(t);
+                tap.current = null;
+              }}
+            >
+            <SwipeRow
               label={t.title}
               height={68}
               radius={18}
@@ -109,7 +124,9 @@ export default function Mobile() {
               }}
             >
               <button
+                aria-label={`Details for ${t.title}`}
                 onClick={() => setDetail(t)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setDetail(t)}
                 style={{ all: 'unset', display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: '100%', padding: '0 16px', cursor: 'pointer', boxSizing: 'border-box' }}
               >
                 <span className="swatch" style={{ width: 10, height: 10, background: t.optional ? '#BABABA' : '#FF6D29', boxShadow: 'none' }} />
@@ -119,6 +136,7 @@ export default function Mobile() {
                 <span className="small muted">{t.minutes}m</span>
               </button>
             </SwipeRow>
+            </div>
           ))}
         </div>
 
