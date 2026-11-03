@@ -7,6 +7,7 @@ import { detectLocal, ollamaModels, openaiModels, testConnection } from '../lib/
 import type { AISettings, ProviderKind } from '../lib/types';
 import { downloadText, isoDate } from '../lib/util';
 import { AccountPanel } from '../components/AccountPanel';
+import { versionLabel } from '../version';
 
 const PROVIDERS: { id: ProviderKind; label: string; text: string }[] = [
   { id: 'manual', label: 'Claude.ai — copy & paste', text: 'Recommended. Claude researches the web using your own Claude account; you paste its reply back. No keys, no cost, works on phone.' },
@@ -294,6 +295,26 @@ export default function Settings() {
           </button>
         </div>
       </section>
+
+      <div className="row wrap center" style={{ justifyContent: 'center', gap: 10 }}>
+        <span className="tiny faint">{versionLabel()}</span>
+        <button
+          className="btn sm ghost"
+          onClick={async () => {
+            toast('Checking for updates…');
+            try {
+              const reg = await navigator.serviceWorker?.getRegistration();
+              await reg?.update();
+            } catch {
+              /* offline or no service worker */
+            }
+            // If a new version installed, the app reloads itself; otherwise reload to be sure.
+            setTimeout(() => location.reload(), 1500);
+          }}
+        >
+          Check for updates
+        </button>
+      </div>
     </div>
   );
 }

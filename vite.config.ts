@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { execSync } from 'node:child_process';
 import { handleAccount, memoryKV, redisKV, type KV } from './api/account';
 
 // Serves /api/account during `npm run dev` / `npm run preview`, exactly like
@@ -54,12 +55,29 @@ const proxy = {
   },
 };
 
+// Which build is this? Shown in the app so you can tell if a deploy is live.
+function buildVersion() {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (sha) return sha.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'dev';
+  }
+}
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(buildVersion()),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     localSyncApi(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registered from src/main.tsx so we control update checks and reloads.
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Rabbit Hole',
@@ -80,6 +98,10 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/ollama/, /^\/lmstudio/, /^\/api\//],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // New versions take over straight away and old caches are removed.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

@@ -6,6 +6,7 @@ import { Icon, Range, toast } from '../components/ui';
 import { accountsAvailable, logIn, resetPassword, signUp, useAuth } from '../lib/auth';
 import { syncSettled } from '../lib/sync';
 import { downloadText } from '../lib/util';
+import { versionLabel } from '../version';
 import { DOMAINS } from '../lib/catalog';
 import { useStore } from '../lib/store';
 import type { Domain, LearningStyle } from '../lib/types';
@@ -73,7 +74,7 @@ export default function Onboarding() {
       <Background />
       <header className="topbar">
         <span className="small">Rabbit Hole</span>
-        <span className="small muted">
+        <span className="small muted" title={versionLabel()}>
           {step + 1} / 4
         </span>
       </header>
@@ -105,6 +106,7 @@ export default function Onboarding() {
                 }}
                 onLoggedIn={afterLogin}
               />
+              <div className="tiny faint">{versionLabel()}</div>
             </div>
           )}
 
