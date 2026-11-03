@@ -1,48 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { handleSync, memoryKV } from '../../../api/sync';
 import { merge, type Payload } from '../sync';
 import { emptyMeta } from '../store';
 import type { Hole, Profile } from '../types';
-
-const CODE = 'abcdefghijklmnopqrstuvwxyz012345';
-const req = (method: string, body?: unknown, code = CODE) =>
-  new Request('http://x/api/sync', { method, headers: { Authorization: `Bearer ${code}` }, body: body ? JSON.stringify(body) : undefined });
-
-describe('/api/sync handler', () => {
-  it('reports configuration on ping', async () => {
-    expect(await (await handleSync(new Request('http://x/api/sync?ping=1'), null)).json()).toEqual({ ok: true, configured: false });
-    expect((await handleSync(req('GET'), null)).status).toBe(503);
-  });
-
-  it('rejects bad codes', async () => {
-    expect((await handleSync(req('GET', undefined, 'short'), memoryKV())).status).toBe(401);
-  });
-
-  it('stores, versions and rejects stale writes', async () => {
-    const kv = memoryKV();
-    expect(await (await handleSync(req('GET'), kv)).json()).toMatchObject({ version: 0, data: null });
-    const w1 = await handleSync(req('PUT', { baseVersion: 0, data: { a: 1 } }), kv);
-    expect(await w1.json()).toMatchObject({ version: 1 });
-    const stale = await handleSync(req('PUT', { baseVersion: 0, data: { a: 2 } }), kv);
-    expect(stale.status).toBe(409);
-    expect(await stale.json()).toMatchObject({ version: 1, data: { a: 1 } });
-    const w2 = await handleSync(req('PUT', { baseVersion: 1, data: { a: 3 } }), kv);
-    expect(w2.status).toBe(200);
-    expect(await (await handleSync(req('GET'), kv)).json()).toMatchObject({ version: 2, data: { a: 3 } });
-  });
-
-  it('keeps different codes apart', async () => {
-    const kv = memoryKV();
-    await handleSync(req('PUT', { baseVersion: 0, data: { mine: true } }), kv);
-    const other = await handleSync(req('GET', undefined, 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'), kv);
-    expect((await other.json()).data).toBeNull();
-  });
-
-  it('refuses oversized payloads', async () => {
-    const big = await handleSync(req('PUT', { baseVersion: 0, data: { x: 'a'.repeat(1_000_000) } }), memoryKV());
-    expect(big.status).toBe(413);
-  });
-});
 
 const hole = (id: string, title: string, createdAt = '2026-01-01'): Hole => ({ id, title, createdAt } as unknown as Hole);
 const profile = (name: string) => ({ name } as unknown as Profile);

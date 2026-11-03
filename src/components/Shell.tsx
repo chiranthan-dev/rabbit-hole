@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { Home09Icon, Compass01Icon, Archive01Icon, User03Icon, Settings02Icon } from '@hugeicons/core-free-icons';
 import { Icon, Toasts } from './ui';
 import { useStore } from '../lib/store';
-import { SyncDot } from './SyncPanel';
+import { AccountChip, SyncDot } from './AccountPanel';
 
 const Grainient = lazy(() => import('../bits/Grainient'));
 
@@ -67,6 +67,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
+          <AccountChip />
         </div>
       </header>
       <main className="main">{children}</main>

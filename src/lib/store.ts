@@ -63,7 +63,8 @@ export interface SyncMeta {
   ideasAt: number;
 }
 export interface SyncState {
-  code?: string;
+  /** The account this device syncs with (undefined = guest / not syncing). */
+  userId?: string;
   version: number;
   lastSyncAt?: string;
   meta: SyncMeta;

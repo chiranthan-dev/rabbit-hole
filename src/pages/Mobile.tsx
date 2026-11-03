@@ -13,7 +13,7 @@ import type { Task } from '../lib/types';
 import SwipeRow from '../bits/SwipeRow';
 import SpringCheck from '../bits/SpringCheck';
 import { resourceLinks } from '../lib/extras';
-import { SyncDot } from '../components/SyncPanel';
+import { SyncDot } from '../components/AccountPanel';
 import { cycleHole, HoleSwitcher } from '../components/HoleSwitcher';
 import { PastHolesList } from '../components/PastHoles';
 

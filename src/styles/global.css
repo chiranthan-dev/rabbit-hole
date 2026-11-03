@@ -1084,3 +1084,41 @@ input[type='range']::-moz-range-thumb {
   border-radius: 50%;
   background: var(--warn);
 }
+
+/* ---------- account ---------- */
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+  background: radial-gradient(circle at 35% 30%, #ffb48f, var(--orange));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 6px 20px -8px rgba(255, 109, 41, 0.9);
+  flex: none;
+}
+.avatar.lg {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: left;
+}
+.recovery {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px dashed var(--orange-line);
+  background: var(--orange-soft);
+  color: #ffe3d6;
+  user-select: all;
+}

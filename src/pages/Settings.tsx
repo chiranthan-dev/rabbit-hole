@@ -6,7 +6,7 @@ import { defaultAI, exportData, useStore } from '../lib/store';
 import { detectLocal, ollamaModels, openaiModels, testConnection } from '../lib/ai/providers';
 import type { AISettings, ProviderKind } from '../lib/types';
 import { downloadText, isoDate } from '../lib/util';
-import { SyncPanel } from '../components/SyncPanel';
+import { AccountPanel } from '../components/AccountPanel';
 
 const PROVIDERS: { id: ProviderKind; label: string; text: string }[] = [
   { id: 'manual', label: 'Claude.ai — copy & paste', text: 'Recommended. Claude researches the web using your own Claude account; you paste its reply back. No keys, no cost, works on phone.' },
@@ -210,7 +210,7 @@ export default function Settings() {
         </details>
       </section>
 
-      <SyncPanel />
+      <AccountPanel />
 
       <section className="card stack lg">
         <div className="h2">You</div>

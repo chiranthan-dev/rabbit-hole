@@ -1,4 +1,4 @@
-// Keeps your data in step across devices through /api/sync.
+// Keeps your data in step across every device you're logged in on (/api/account?op=data).
 //
 // Every change on this device is timestamped per section (profile, each
 // hole, saved topics…). On sync we fetch the server copy, merge section by
@@ -114,29 +114,20 @@ const same = (a: unknown, b: unknown) => JSON.stringify(stable(a)) === JSON.stri
 
 // ------------------------------------------------------------------ network
 
-const API = '/api/sync';
-const authed = (code: string, init: RequestInit = {}) =>
-  fetch(API, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${code}`, 'Content-Type': 'application/json' } });
+const API = '/api/account?op=data';
+const authed = (init: RequestInit = {}) =>
+  fetch(API, { ...init, credentials: 'same-origin', headers: { ...(init.headers ?? {}), 'Content-Type': 'application/json' } });
 
-/** Is the sync API reachable and configured on this deployment? */
-export async function syncAvailable(): Promise<{ ok: boolean; message?: string }> {
-  try {
-    const r = await fetch(`${API}?ping=1`);
-    const type = r.headers.get('content-type') ?? '';
-    if (!type.includes('json')) return { ok: false, message: 'This copy of the app has no sync server (run it on Vercel, or with npm run dev).' };
-    const j = await r.json();
-    return j.configured ? { ok: true } : { ok: false, message: 'The sync database isn’t connected yet. In Vercel: Storage → Upstash Redis → connect to this project, then redeploy.' };
-  } catch {
-    return { ok: false, message: 'You’re offline.' };
-  }
-}
+/** Called when the server says the session is gone (set by auth.ts, avoiding a circular import). */
+let onUnauthorized: () => void = () => {};
+export const setOnUnauthorized = (fn: () => void) => (onUnauthorized = fn);
 
 let running = false;
 let again = false;
 
 export async function syncNow(): Promise<void> {
-  const code = useStore.getState().sync.code;
-  if (!code) {
+  const userId = useStore.getState().sync.userId;
+  if (!userId) {
     setStatus('off');
     return;
   }
@@ -150,7 +141,7 @@ export async function syncNow(): Promise<void> {
     for (let attempt = 0; attempt < 4; attempt++) {
       let res: Response;
       try {
-        res = await authed(code);
+        res = await authed();
       } catch {
         setStatus('offline', 'Offline — changes will sync when you’re back.');
         return;
@@ -160,6 +151,11 @@ export async function syncNow(): Promise<void> {
         return;
       }
       const remote = (await res.json()) as { version: number; data: Payload | null; error?: string };
+      if (res.status === 401) {
+        setStatus('error', 'Signed out — log in again to keep syncing.');
+        onUnauthorized();
+        return;
+      }
       if (!res.ok) {
         setStatus(res.status === 503 ? 'unavailable' : 'error', remote.error ?? `Sync failed (${res.status}).`);
         return;
@@ -172,7 +168,7 @@ export async function syncNow(): Promise<void> {
         setStatus('synced');
         return;
       }
-      const put = await authed(code, { method: 'PUT', body: JSON.stringify({ baseVersion: remote.version, data: merged }) });
+      const put = await authed({ method: 'PUT', body: JSON.stringify({ baseVersion: remote.version, data: merged }) });
       if (put.status === 409) continue; // another device wrote first — merge again
       const out = await put.json().catch(() => ({}));
       if (!put.ok) {
@@ -205,8 +201,8 @@ export function startSync() {
   started = true;
 
   useStore.subscribe((s, prev) => {
-    if (applying || !s.sync.code) return;
-    if (s.sync.code !== prev.sync.code) {
+    if (applying || !s.sync.userId) return;
+    if (s.sync.userId !== prev.sync.userId) {
       void syncNow();
       return;
     }
@@ -244,36 +240,25 @@ export function startSync() {
   void syncNow();
 }
 
-// ------------------------------------------------------------------ codes
-
-export function newSyncCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-export const isValidCode = (c: string) => /^[A-Za-z0-9_-]{24,128}$/.test(c.trim());
-
-export const linkUrl = (code: string) => `${location.origin}/link#${code}`;
+// ------------------------------------------------------------------ account link
 
 /**
- * Connect this device to a sync code.
- * `primary` = this device starts the sync, so its data is stamped as current;
- * a device joining an existing code keeps zero stamps so the server copy wins
- * (its own extra holes are still kept).
+ * Start syncing this device with an account. The device's own stamps stay as
+ * they are, so the account's copy wins where both have something, while
+ * anything only this device has (e.g. holes made as a guest) is kept and uploaded.
  */
-export function connect(code: string, primary = false) {
-  const s = useStore.getState();
-  if (primary) {
-    const now = Date.now();
-    const meta = { ...emptyMeta(), profileAt: now, savedAt: now, activeAt: now, ideasAt: now, holesAt: Object.fromEntries(s.holes.map((h) => [h.id, now])) };
-    applying = true;
-    useStore.setState({ sync: { ...s.sync, meta } });
-    applying = false;
-  }
-  useStore.getState().setSync({ code: code.trim(), version: 0 });
+export function connect(userId: string) {
+  useStore.getState().setSync({ userId, version: 0 });
 }
 
 export function disconnect() {
-  useStore.getState().setSync({ code: undefined, version: 0, lastSyncAt: undefined });
+  useStore.getState().setSync({ userId: undefined, version: 0, lastSyncAt: undefined });
   setStatus('off');
+}
+
+/** Run a sync and wait until it (and any follow-up run) has finished. */
+export async function syncSettled(timeoutMs = 12_000) {
+  const t0 = Date.now();
+  await syncNow();
+  while (running && Date.now() - t0 < timeoutMs) await new Promise((r) => setTimeout(r, 100));
 }

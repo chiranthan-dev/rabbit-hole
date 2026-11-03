@@ -1,14 +1,14 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { handleSync, memoryKV, redisKV } from './api/sync';
+import { handleAccount, memoryKV, redisKV, type KV } from './api/account';
 
-// Serves /api/sync during `npm run dev` / `npm run preview`, just like the
-// Vercel Function does in production. Uses Upstash if its env vars are in
-// .env.local, otherwise an in-memory store (handy for trying sync on LAN).
+// Serves /api/account during `npm run dev` / `npm run preview`, exactly like
+// the Vercel Function in production. Uses Upstash if its env vars are in
+// .env.local, otherwise an in-memory store (accounts reset when you restart).
 function localSyncApi(): Plugin {
-  let kv: ReturnType<typeof memoryKV> | null = null;
+  let kv: KV | null = null;
   const handler = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    if (!req.url?.startsWith('/api/sync')) return next();
+    if (!req.url?.startsWith('/api/account')) return next();
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const body = chunks.length ? Buffer.concat(chunks).toString('utf8') : undefined;
@@ -17,7 +17,7 @@ function localSyncApi(): Plugin {
       headers: req.headers as Record<string, string>,
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
     });
-    const response = await handleSync(request, kv);
+    const response = await handleAccount(request, kv);
     res.statusCode = response.status;
     response.headers.forEach((v, k) => res.setHeader(k, v));
     res.end(await response.text());

@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight01Icon, ArrowDownRight01Icon } from '@hugeicons/core-free-icons';
 import { Background } from '../components/Shell';
-import { Icon, Range } from '../components/ui';
+import { Icon, Range, toast } from '../components/ui';
+import { accountsAvailable, logIn, resetPassword, signUp, useAuth } from '../lib/auth';
+import { syncSettled } from '../lib/sync';
+import { downloadText } from '../lib/util';
 import { DOMAINS } from '../lib/catalog';
 import { useStore } from '../lib/store';
 import type { Domain, LearningStyle } from '../lib/types';
@@ -23,8 +26,37 @@ const adventureLabel = (a: number) =>
 export default function Onboarding() {
   const onboard = useStore((s) => s.onboard);
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const initialMode = (params.get('auth') as Mode) || 'signup';
+  const auth = useAuth();
   const [step, setStep] = useState(0);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(useStore.getState().profile.name);
+  const [recovery, setRecovery] = useState('');
+
+  // Set as soon as someone signs in on this screen, so the check below only
+  // applies to people who were already logged in when they opened it.
+  const authedHere = useRef(false);
+
+  // Already logged in (e.g. "Redo onboarding"): skip the sign-in screen.
+  useEffect(() => {
+    if (auth.status !== 'in' || authedHere.current || recovery || step !== 0) return;
+    if (useStore.getState().profile.onboarded) nav('/', { replace: true });
+    else {
+      setName(auth.user?.name ?? useStore.getState().profile.name);
+      setStep(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.status]);
+
+  const afterLogin = async () => {
+    await syncSettled(); // bring this account's holes onto the device first
+    const st = useStore.getState();
+    if (st.profile.onboarded) nav('/', { replace: true });
+    else {
+      setName(useAuth.getState().user?.name ?? st.profile.name);
+      setStep(1);
+    }
+  };
   const [domains, setDomains] = useState<Domain[]>([]);
   const [adv, setAdv] = useState(0.55);
   const [minutes, setMinutes] = useState(45);
@@ -47,7 +79,7 @@ export default function Onboarding() {
       </header>
       <ClickSpark sparkColor={['#FF6D29', '#ffffff', '#BABABA']} sparkCount={10} sparkRadius={22}>
         <main className="main" style={{ maxWidth: 760, paddingTop: '8vh', minHeight: '80dvh' }}>
-          {step === 0 && (
+          {step === 0 && !recovery && (
             <div className="stack xl center fade-in">
               <div className="eyebrow">A weekly challenge for the curious</div>
               <h1 className="display">Rabbit Hole</h1>
@@ -60,20 +92,32 @@ export default function Onboarding() {
                 Pick something you’re curious about. Tell us how much time you have. Rabbit Hole researches it and builds a week of small,
                 achievable tasks — designed for <ShinyText text="understanding, not just finishing" color="#ffd9c7" shineColor="#FF6D29" speed={3} />.
               </p>
-              <div className="stack" style={{ maxWidth: 380, margin: '0 auto', width: '100%' }}>
-                <input
-                  className="input pillish center"
-                  placeholder="What should we call you?"
-                  value={name}
-                  autoFocus
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && setStep(1)}
-                />
-                <button className="btn primary lg" onClick={() => setStep(1)}>
-                  Let’s go <Icon icon={ArrowRight01Icon} size={16} />
-                </button>
-              </div>
+              <AuthBox
+                initialMode={initialMode}
+                onStart={() => (authedHere.current = true)}
+                onGuest={(n) => {
+                  setName(n);
+                  setStep(1);
+                }}
+                onSignedUp={(code, userName) => {
+                  setName(userName);
+                  setRecovery(code);
+                }}
+                onLoggedIn={afterLogin}
+              />
             </div>
+          )}
+
+          {recovery && step === 0 && (
+            <RecoveryCode
+              code={recovery}
+              onContinue={async () => {
+                await syncSettled(); // after a reset, the account's holes come down first
+                setRecovery('');
+                if (useStore.getState().profile.onboarded) nav('/', { replace: true });
+                else setStep(1);
+              }}
+            />
           )}
 
           {step === 1 && (
@@ -157,6 +201,161 @@ function Nav({ onBack, onNext, nextDisabled }: { onBack: () => void; onNext: () 
         Back
       </button>
       <button className="btn primary" disabled={nextDisabled} onClick={onNext}>
+        Continue <Icon icon={ArrowRight01Icon} size={16} />
+      </button>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ sign in / sign up
+
+type Mode = 'signup' | 'login' | 'reset' | 'guest';
+
+function AuthBox({
+  initialMode,
+  onStart,
+  onGuest,
+  onSignedUp,
+  onLoggedIn,
+}: {
+  initialMode: Mode;
+  onStart: () => void;
+  onGuest: (name: string) => void;
+  onSignedUp: (recoveryCode: string, name: string) => void;
+  onLoggedIn: () => Promise<void>;
+}) {
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [f, setF] = useState({ name: '', email: '', password: '', code: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+
+  useEffect(() => {
+    accountsAvailable().then((ok) => {
+      setAvailable(ok);
+      if (!ok) setMode('guest');
+    });
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      if (mode === 'guest') return onGuest(f.name.trim());
+      onStart();
+      if (mode === 'signup') onSignedUp(await signUp(f.name.trim(), f.email, f.password), f.name.trim());
+      else if (mode === 'login') {
+        await logIn(f.email, f.password);
+        await onLoggedIn();
+      } else {
+        const code = await resetPassword(f.email, f.code, f.password);
+        toast('Password reset. You’re logged in.');
+        onSignedUp(code, '');
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = { signup: 'Create account', login: 'Log in', reset: 'Reset password & log in', guest: 'Continue' }[mode];
+
+  return (
+    <form className="auth-card stack" onSubmit={submit} noValidate>
+      {available && mode !== 'guest' && (
+        <div className="tabs" style={{ alignSelf: 'center' }} role="tablist">
+          {(['signup', 'login'] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m || (m === 'login' && mode === 'reset') ? 'on' : ''} onClick={() => (setMode(m), setError(''))}>
+              {m === 'signup' ? 'Create account' : 'Log in'}
+            </button>
+          ))}
+        </div>
+      )}
+      {mode === 'reset' && <div className="small muted center">Enter your email and the recovery code you saved when you signed up.</div>}
+      {(mode === 'signup' || mode === 'guest') && (
+        <input className="input pillish" autoComplete="name" placeholder="What should we call you?" value={f.name} onChange={set('name')} autoFocus />
+      )}
+      {mode !== 'guest' && <input className="input pillish" type="email" autoComplete="email" placeholder="Email" value={f.email} onChange={set('email')} autoFocus={mode !== 'signup'} />}
+      {mode === 'reset' && <input className="input pillish" autoComplete="one-time-code" placeholder="Recovery code (XXXX-XXXX-XXXX-XXXX)" value={f.code} onChange={set('code')} />}
+      {mode !== 'guest' && (
+        <input
+          className="input pillish"
+          type="password"
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          placeholder={mode === 'login' ? 'Password' : mode === 'reset' ? 'New password (8+ characters)' : 'Password (8+ characters)'}
+          value={f.password}
+          onChange={set('password')}
+        />
+      )}
+      {error && <div className="small center" style={{ color: '#ff9b9b' }}>{error}</div>}
+      <button className="btn primary lg" disabled={busy || available === null}>
+        {busy ? 'One moment…' : label} <Icon icon={ArrowRight01Icon} size={16} />
+      </button>
+      <div className="row wrap" style={{ justifyContent: 'center', gap: 14 }}>
+        {mode === 'login' && (
+          <button type="button" className="btn sm ghost" onClick={() => (setMode('reset'), setError(''))}>
+            Forgot password?
+          </button>
+        )}
+        {mode === 'reset' && (
+          <button type="button" className="btn sm ghost" onClick={() => (setMode('login'), setError(''))}>
+            Back to log in
+          </button>
+        )}
+        {available && mode !== 'guest' && (
+          <button type="button" className="btn sm ghost" onClick={() => (setMode('guest'), setError(''))}>
+            Continue without an account
+          </button>
+        )}
+        {available && mode === 'guest' && (
+          <button type="button" className="btn sm ghost" onClick={() => setMode('signup')}>
+            Create an account instead
+          </button>
+        )}
+      </div>
+      {mode === 'guest' && (
+        <div className="tiny faint center">
+          {available === false ? 'Accounts aren’t available right now — ' : 'As a guest, '}your holes are saved only in this browser. You can create an account later and keep them.
+        </div>
+      )}
+    </form>
+  );
+}
+
+function RecoveryCode({ code, onContinue }: { code: string; onContinue: () => void }) {
+  const [saved, setSaved] = useState(false);
+  return (
+    <div className="stack lg center fade-in auth-card" style={{ textAlign: 'center' }}>
+      <div className="eyebrow">One last thing</div>
+      <h2 className="h1">Save your recovery code</h2>
+      <p className="grey small">If you ever forget your password, this code lets you reset it. It’s shown only now — keep it somewhere safe, like your password manager.</p>
+      <div className="recovery">{code}</div>
+      <div className="row" style={{ justifyContent: 'center', gap: 8 }}>
+        <button
+          type="button"
+          className="btn sm"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(code);
+              toast('Copied.');
+            } catch {
+              toast('Select the code and copy it.');
+            }
+          }}
+        >
+          Copy
+        </button>
+        <button type="button" className="btn sm" onClick={() => downloadText('rabbit-hole-recovery-code.txt', `Rabbit Hole recovery code\n${code}\n`, 'text/plain')}>
+          Download
+        </button>
+      </div>
+      <label className="row small" style={{ gap: 8, justifyContent: 'center', cursor: 'pointer' }}>
+        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I’ve saved it
+      </label>
+      <button className="btn primary lg" disabled={!saved} onClick={onContinue}>
         Continue <Icon icon={ArrowRight01Icon} size={16} />
       </button>
     </div>
