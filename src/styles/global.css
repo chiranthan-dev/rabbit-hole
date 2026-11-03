@@ -51,23 +51,6 @@ body {
   overflow-x: hidden;
 }
 
-/* A blurred strip behind the phone's status bar (clock, battery) so content
-   scrolling underneath never collides with it. Zero height on devices
-   without a notch / status-bar overlay. */
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-top);
-  z-index: 40;
-  pointer-events: none;
-  background: rgba(22, 19, 22, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
 /* App-like feel on phones: no double-tap zoom, no font inflation. */
 html {
   touch-action: manipulation;
