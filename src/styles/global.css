@@ -973,3 +973,87 @@ input[type='range']::-moz-range-thumb {
   animation-duration: 0.001ms !important;
   transition-duration: 0.001ms !important;
 }
+
+/* ---------- hole switcher (multiple active rabbit holes) ---------- */
+.switcher {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px;
+  margin: -2px;
+  scroll-snap-type: x proximity;
+}
+.switcher::-webkit-scrollbar {
+  display: none;
+}
+.switch-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 1 260px;
+  min-width: 170px;
+  padding: 8px 14px 8px 8px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: rgba(22, 19, 22, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  text-decoration: none;
+  scroll-snap-align: start;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.15s var(--ease);
+}
+.switch-pill:hover {
+  border-color: var(--line-strong);
+}
+.switch-pill:active {
+  transform: scale(0.98);
+}
+.switch-pill.on {
+  border-color: var(--orange-line);
+  background: var(--orange-soft);
+  box-shadow: 0 8px 30px -18px rgba(255, 109, 41, 0.9);
+}
+.switch-pill.new {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 8px 16px;
+  color: var(--muted);
+  border-style: dashed;
+  justify-content: center;
+}
+.switch-pill.new:hover {
+  color: var(--white);
+}
+.switch-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+.switcher.compact {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)) auto;
+  overflow: visible;
+}
+.switcher.compact .switch-pill {
+  min-width: 0;
+  gap: 7px;
+  padding: 6px 10px 6px 6px;
+}
+.switcher.compact .switch-pill.new {
+  padding: 6px 12px;
+}
+.switcher.compact .switch-title {
+  font-size: 12.5px;
+  max-width: 100%;
+}
+.switcher.compact .switch-pill .tiny {
+  font-size: 11px;
+  white-space: nowrap;
+}

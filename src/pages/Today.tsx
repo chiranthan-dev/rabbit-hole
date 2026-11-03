@@ -10,10 +10,12 @@ import { recommend } from '../lib/recommend';
 import { clamp, fmtMinutes, greeting, isoDate, prettyDate } from '../lib/util';
 import type { Hole } from '../lib/types';
 import ShinyText from '../bits/ShinyText';
+import { HoleSwitcher } from '../components/HoleSwitcher';
 
 export default function Today() {
   const hole = useActiveHole();
-  return hole ? <ActiveToday hole={hole} /> : <NoHole />;
+  // Keyed by hole so switching resets the selected day, drafts, etc.
+  return hole ? <ActiveToday key={hole.id} hole={hole} /> : <NoHole />;
 }
 
 function NoHole() {
@@ -94,6 +96,7 @@ function ActiveToday({ hole }: { hole: Hole }) {
 
   return (
     <div className="stack xl">
+      <HoleSwitcher />
       <section className="stack" style={{ gap: 10 }}>
         <div className="eyebrow">
           {greeting()}

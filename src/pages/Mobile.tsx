@@ -3,7 +3,7 @@
 
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Maximize01Icon } from '@hugeicons/core-free-icons';
+import { Maximize01Icon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { Background } from '../components/Shell';
 import { Icon, Modal, Ring, Toasts, toast } from '../components/ui';
 import { useActiveHole, useStore } from '../lib/store';
@@ -14,6 +14,7 @@ import SwipeRow from '../bits/SwipeRow';
 import SpringCheck from '../bits/SpringCheck';
 import { resourceLinks } from '../lib/extras';
 import { SyncDot } from '../components/SyncPanel';
+import { cycleHole, HoleSwitcher } from '../components/HoleSwitcher';
 
 export default function Mobile() {
   const hole = useActiveHole();
@@ -23,6 +24,8 @@ export default function Mobile() {
   const motion = useStore((s) => s.ui.motion);
   const [detail, setDetail] = useState<Task | null>(null);
   const tap = useRef<{ x: number; y: number; t: number } | null>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const multi = useStore((s) => s.holes.filter((h) => h.status === 'active').length > 1);
 
   if (!hole)
     return (
@@ -68,7 +71,22 @@ export default function Mobile() {
           </span>
         </div>
 
-        <div className="stack" style={{ gap: 4 }}>
+        <HoleSwitcher compact />
+
+        <div
+          className="stack"
+          style={{ gap: 4, touchAction: 'pan-y' }}
+          // Swipe the title left/right to flip between your holes.
+          onTouchStart={(e) => (swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
+          onTouchEnd={(e) => {
+            const s0 = swipe.current;
+            swipe.current = null;
+            if (!s0) return;
+            const dx = e.changedTouches[0].clientX - s0.x;
+            const dy = e.changedTouches[0].clientY - s0.y;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) cycleHole(dx < 0 ? 1 : -1);
+          }}
+        >
           <span className="eyebrow">
             {raw < 0 ? `Starts ${prettyDate(hole.startDate)}` : raw > 6 ? 'Week complete — wrap up in the full app' : `Day ${ti + 1} of 7 · ${prettyDate(day.date)}`}
           </span>
@@ -90,7 +108,9 @@ export default function Mobile() {
           </div>
         </div>
 
-        {open.length > 0 && <div className="tiny faint">Swipe left to finish · tap for details</div>}
+        {open.length > 0 && (
+          <div className="tiny faint">Swipe a task left to finish · tap for details{multi ? ' · swipe the title to switch holes' : ''}</div>
+        )}
         <div className="stack" style={{ gap: 10 }}>
           {open.map((t) => (
             <div
@@ -113,7 +133,7 @@ export default function Mobile() {
               actionColor="#FF6D29"
               textColor="#ffffff"
               actions={[
-                { id: 'done', label: 'Done' },
+                { id: 'done', label: 'Done', icon: <Icon icon={Tick02Icon} size={20} stroke={2} /> },
                 { id: 'skip', label: 'Skip', color: '#5a4034', dismiss: true },
               ]}
               onCommit={(a) => {

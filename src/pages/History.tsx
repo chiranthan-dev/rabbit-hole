@@ -32,7 +32,7 @@ export default function History() {
                 <span className="tag orange">
                   {domainEmoji(h.domain)} {domainLabel(h.domain)}
                 </span>
-                <span className={`tag${h.status === 'completed' ? ' good' : h.status === 'abandoned' ? ' warn' : ''}`}>{h.status}</span>
+                <span className={`tag${h.status === 'completed' ? ' good' : h.status === 'abandoned' ? ' warn' : ''}`}>{h.status === 'abandoned' ? 'shelved' : h.status}</span>
               </div>
               <div className="h2">{h.title}</div>
               <div className="small muted">{h.final?.summary || h.tagline || h.brief.summary}</div>

@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight01Icon, ArrowLeft01Icon, Refresh01Icon, Rocket01Icon, Tick02Icon, Cancel01Icon } from '@hugeicons/core-free-icons';
 import { Icon, Range, toast } from '../components/ui';
-import { useStore } from '../lib/store';
+import { canStartHole, MAX_ACTIVE, useStore } from '../lib/store';
+import { domainEmoji as emojiFor } from '../lib/catalog';
 import { recommend } from '../lib/recommend';
 import { domainEmoji, domainLabel } from '../lib/catalog';
 import { createHole, type Step } from '../lib/create';
@@ -68,6 +69,15 @@ export default function NewHole() {
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
 
+  const activeHoles = holes.filter((h) => h.status === 'active');
+  const full = activeHoles.length >= MAX_ACTIVE;
+  /** Minutes already planned on a date by the holes you're in (unfinished core tasks). */
+  const otherLoad = (date: string) =>
+    activeHoles.reduce((sum, h) => {
+      const d = h.days.find((x) => x.date === date);
+      return sum + (d ? d.tasks.filter((t) => !t.done && !t.optional && !t.skipped).reduce((s2, t) => s2 + t.minutes, 0) : 0);
+    }, 0);
+
   const quick = useMemo(() => recommend(profile, holes, { seed: 42, count: 6 }), [profile, holes]);
   const total = budgets.reduce((s, b) => s + b, 0);
 
@@ -116,6 +126,10 @@ export default function NewHole() {
 
   const begin = () => {
     if (!result) return;
+    if (!canStartHole(useStore.getState().holes)) {
+      toast(`You’re already in ${MAX_ACTIVE} rabbit holes — shelve or finish one first.`);
+      return;
+    }
     addHole(result.hole);
     clearDraft();
     toast('Down the rabbit hole you go 🕳️');
@@ -124,6 +138,7 @@ export default function NewHole() {
 
   return (
     <div className="stack xl" style={{ maxWidth: 820, margin: '0 auto' }}>
+      {full && <LimitCard />}
       <div className="stack" style={{ gap: 6 }}>
         <div className="eyebrow">New rabbit hole · step {Math.min(step, 4) + 1} of 5</div>
         <h1 className="display sm">{step === 0 ? 'What are you curious about?' : topic || 'New rabbit hole'}</h1>
@@ -261,9 +276,19 @@ export default function NewHole() {
                     <span className="small" style={{ width: 64, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {b === 0 ? 'rest' : fmtMinutes(b)}
                     </span>
+                    {activeHoles.length > 0 && (
+                      <span className="tiny faint hide-sm" style={{ width: 86, textAlign: 'right' }} title="Already planned that day in your other rabbit holes">
+                        {otherLoad(date) ? `+${fmtMinutes(otherLoad(date))} other` : '—'}
+                      </span>
+                    )}
                   </div>
                 );
               })}
+              {activeHoles.length > 0 && (
+                <div className="tiny faint">
+                  “other” = time already planned that day in {activeHoles.map((h) => h.title).join(', ')}. Keep the total realistic.
+                </div>
+              )}
             </div>
             <div className="divider" />
             <div className="row between small">
@@ -371,6 +396,45 @@ export default function NewHole() {
       )}
 
       {step === 4 && result && <Review result={result} onBegin={begin} onRegenerate={generate} onBack={() => setStep(2)} />}
+    </div>
+  );
+}
+
+/** Shown when you're already in MAX_ACTIVE holes: shelve one in a tap, or keep planning and start later. */
+function LimitCard() {
+  const holes = useStore((s) => s.holes).filter((h) => h.status === 'active');
+  const abandonHole = useStore((s) => s.abandonHole);
+  const nav = useNavigate();
+  return (
+    <div className="card hot stack fade-in">
+      <div className="stack" style={{ gap: 4 }}>
+        <div className="h2">You’re in {MAX_ACTIVE} rabbit holes already</div>
+        <div className="small muted">
+          That’s the limit, so each one gets real attention. Shelve one (you can resume it any time from the Journal), or finish it first. You can still plan this one now.
+        </div>
+      </div>
+      {holes.map((h) => (
+        <div key={h.id} className="row between wrap" style={{ gap: 8 }}>
+          <span className="row" style={{ gap: 8 }}>
+            <span>{emojiFor(h.domain)}</span>
+            <span>{h.title}</span>
+          </span>
+          <span className="row" style={{ gap: 6 }}>
+            <button className="btn sm ghost" onClick={() => nav(`/hole/${h.id}`)}>
+              Open
+            </button>
+            <button
+              className="btn sm"
+              onClick={() => {
+                abandonHole(h.id);
+                toast(`Shelved “${h.title}”. Resume it any time from the Journal.`);
+              }}
+            >
+              Shelve
+            </button>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

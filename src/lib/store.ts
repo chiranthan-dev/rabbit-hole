@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
@@ -95,6 +96,8 @@ interface State {
   addHole: (h: Hole) => void;
   updateHole: (id: string, fn: (h: Hole) => Hole) => void;
   setActive: (id?: string) => void;
+  /** Bring a shelved hole back. Returns false if you're already in MAX_ACTIVE holes. */
+  resumeHole: (id: string) => boolean;
   patchTask: (holeId: string, taskId: string, patch: Partial<Task>) => void;
   completeTask: (holeId: string, taskId: string, r: { understanding?: Understanding; note?: string; spentMinutes?: number }) => void;
   uncompleteTask: (holeId: string, taskId: string) => void;
@@ -184,12 +187,18 @@ export const useStore = create<State>()(
             let profile = bump(s.profile, h.domain, h.tags, 0.5, 0.4);
             const key = h.catalogId ?? h.id;
             profile = { ...profile, topicSignals: { ...profile.topicSignals, [key]: { ...sigOf(profile, key), startedAt: h.createdAt } } };
-            // Only one active hole at a time; the previous one is shelved as abandoned if unfinished.
-            const holes = s.holes.map((x) => (x.status === 'active' ? { ...x, status: 'abandoned' as const } : x));
-            return { holes: [...holes, h], activeHoleId: h.id, profile, savedTopics: s.savedTopics.filter((t) => t.id !== h.catalogId) };
+            // Up to MAX_ACTIVE holes run side by side; the new one becomes the one in focus.
+            if (activeCount(s.holes) >= MAX_ACTIVE) return {};
+            return { holes: [...s.holes, h], activeHoleId: h.id, profile, savedTopics: s.savedTopics.filter((t) => t.id !== h.catalogId) };
           }),
         updateHole: upd,
         setActive: (id) => set({ activeHoleId: id }),
+        resumeHole: (id) => {
+          const s = get();
+          if (activeCount(s.holes) >= MAX_ACTIVE) return false;
+          set({ holes: s.holes.map((h) => (h.id === id ? { ...h, status: 'active' } : h)), activeHoleId: id });
+          return true;
+        },
         patchTask: (holeId, taskId, patch) => upd(holeId, (h) => mapTasks(h, (t) => (t.id === taskId ? { ...t, ...patch } : t))),
         completeTask: (holeId, taskId, r) =>
           upd(holeId, (h) => {
@@ -255,12 +264,12 @@ export const useStore = create<State>()(
         abandonHole: (holeId) =>
           set((s) => ({
             holes: s.holes.map((h) => (h.id === holeId ? { ...h, status: 'abandoned' } : h)),
-            activeHoleId: s.activeHoleId === holeId ? undefined : s.activeHoleId,
+            activeHoleId: s.activeHoleId === holeId ? s.holes.find((h) => h.id !== holeId && h.status === 'active')?.id : s.activeHoleId,
           })),
         deleteHole: (holeId) =>
           set((s) => ({
             holes: s.holes.filter((h) => h.id !== holeId),
-            activeHoleId: s.activeHoleId === holeId ? undefined : s.activeHoleId,
+            activeHoleId: s.activeHoleId === holeId ? s.holes.find((h) => h.id !== holeId && h.status === 'active')?.id : s.activeHoleId,
           })),
 
         setAI: (a) => set((s) => ({ ai: { ...s.ai, ...a } })),
@@ -291,8 +300,20 @@ export const useStore = create<State>()(
 
 // ---------------- selectors ----------------
 
+/** How many rabbit holes you can be in at once. */
+export const MAX_ACTIVE = 3;
+export const activeCount = (holes: Hole[]) => holes.filter((h) => h.status === 'active').length;
+export const canStartHole = (holes: Hole[]) => activeCount(holes) < MAX_ACTIVE;
+
+/** All holes you're currently in, oldest first. */
+export const useActiveHoles = () => {
+  const holes = useStore((s) => s.holes);
+  return useMemo(() => holes.filter((h) => h.status === 'active'), [holes]);
+};
+
+/** The hole in focus: the one you last picked, or the first active one. */
 export const useActiveHole = () =>
-  useStore((s) => s.holes.find((h) => h.id === s.activeHoleId && h.status === 'active'));
+  useStore((s) => s.holes.find((h) => h.id === s.activeHoleId && h.status === 'active') ?? s.holes.find((h) => h.status === 'active'));
 
 export const exportData = () => {
   const s = useStore.getState();

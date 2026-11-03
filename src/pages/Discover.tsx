@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ShuffleIcon, SparklesIcon, Search01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { Icon, Range, toast } from '../components/ui';
 import { TopicCard } from '../components/Widgets';
-import { useStore } from '../lib/store';
+import { MAX_ACTIVE, useStore } from '../lib/store';
 import { profileSummary, recommend, threadSuggestions } from '../lib/recommend';
 import { CATALOG, DOMAINS } from '../lib/catalog';
 import { aiEnabled, isManual } from '../lib/ai/providers';
@@ -46,7 +46,8 @@ export default function Discover() {
   const dismissed = (id: string) => !!profile.topicSignals[id]?.dismissedAt;
   const visible = recs.filter((r) => !dismissed(r.topic.id));
   const threads = threadSuggestions(holes);
-  const active = holes.find((h) => h.status === 'active');
+  const activeHoles = holes.filter((h) => h.status === 'active');
+  const full = activeHoles.length >= MAX_ACTIVE;
 
   const start = (s: Suggestion | { topic: CatalogTopic }) => nav('/new', { state: { topic: s.topic } });
   const startCustom = () => query.trim() && nav('/new', { state: { custom: query.trim() } });
@@ -77,13 +78,22 @@ export default function Discover() {
             doesn’t — every signal tunes the next shuffle.
           </p>
         </div>
-        {active && (
+        {activeHoles.length > 0 && (
           <div className="card flat small row wrap between">
             <span>
-              You’re currently in <b>{active.title}</b>. Starting a new one will shelve it.
+              {full ? (
+                <>
+                  You’re in {MAX_ACTIVE} rabbit holes — the most at once. Finish or shelve one to start another.
+                </>
+              ) : (
+                <>
+                  You’re in {activeHoles.length} of {MAX_ACTIVE} rabbit holes. You can start {MAX_ACTIVE - activeHoles.length} more alongside{' '}
+                  {activeHoles.length === 1 ? <b>{activeHoles[0].title}</b> : 'them'}.
+                </>
+              )}
             </span>
             <button className="btn sm" onClick={() => nav('/')}>
-              Back to it
+              {activeHoles.length === 1 ? 'Back to it' : 'Back to them'}
             </button>
           </div>
         )}

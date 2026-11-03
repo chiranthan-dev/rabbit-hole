@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Add01Icon,
@@ -14,7 +14,7 @@ import {
 import { Bar, Icon, Modal, Range, Tabs, toast } from '../components/ui';
 import { TaskItem } from '../components/TaskItem';
 import { DepthMeter } from '../components/Widgets';
-import { useStore } from '../lib/store';
+import { MAX_ACTIVE, useStore } from '../lib/store';
 import { dayProgress, holeProgress, KIND_META, rebalance, rebudget, TASK_KINDS, todayIndex } from '../lib/planner';
 import { domainEmoji, domainLabel } from '../lib/catalog';
 import { holeMarkdown, offlineQuiz, resourceLinks } from '../lib/extras';
@@ -40,15 +40,19 @@ export default function HolePage() {
   const updateHole = useStore((s) => s.updateHole);
   const setActive = useStore((s) => s.setActive);
   const tab = (params.get('tab') as Tab) || 'week';
+  const isActive = hole?.status === 'active';
+  useEffect(() => {
+    if (isActive && useStore.getState().activeHoleId !== id) setActive(id);
+  }, [id, isActive, setActive]);
   if (!hole) return <div className="empty">That rabbit hole doesn’t exist (any more).</div>;
   const hp = holeProgress(hole);
   const ti = clamp(todayIndex(hole), 0, 6);
 
   const resume = () => {
-    useStore.setState((s) => ({
-      holes: s.holes.map((h) => (h.id === hole.id ? { ...h, status: 'active' } : h.status === 'active' ? { ...h, status: 'abandoned' } : h)),
-    }));
-    setActive(hole.id);
+    if (!useStore.getState().resumeHole(hole.id)) {
+      toast(`You’re already in ${MAX_ACTIVE} rabbit holes — shelve or finish one first.`);
+      return;
+    }
     toast('Back in the hole.');
   };
 
@@ -60,7 +64,7 @@ export default function HolePage() {
             <span className="tag orange">
               {domainEmoji(hole.domain)} {domainLabel(hole.domain)}
             </span>
-            <span className={`tag${hole.status === 'completed' ? ' good' : hole.status === 'abandoned' ? ' warn' : ''}`}>{hole.status}</span>
+            <span className={`tag${hole.status === 'completed' ? ' good' : hole.status === 'abandoned' ? ' warn' : ''}`}>{hole.status === 'abandoned' ? 'shelved' : hole.status}</span>
             <span className="tag">{hole.depth}</span>
             <span className="tag">{hole.source === 'ai' ? hole.model : 'offline plan'}</span>
           </div>
