@@ -51,6 +51,23 @@ body {
   overflow-x: hidden;
 }
 
+/* A blurred strip behind the phone's status bar (clock, battery) so content
+   scrolling underneath never collides with it. Zero height on devices
+   without a notch / status-bar overlay. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  z-index: 40;
+  pointer-events: none;
+  background: rgba(22, 19, 22, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 /* App-like feel on phones: no double-tap zoom, no font inflation. */
 html {
   touch-action: manipulation;
@@ -123,7 +140,8 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px var(--gutter) 10px;
+  /* Clear the iPhone status bar / notch when installed to the home screen. */
+  padding: calc(22px + env(safe-area-inset-top)) calc(var(--gutter) + env(safe-area-inset-right)) 10px calc(var(--gutter) + env(safe-area-inset-left));
 }
 .brand {
   display: flex;
@@ -963,7 +981,7 @@ input[type='range']::-moz-range-thumb {
 .mobile {
   max-width: 520px;
   margin: 0 auto;
-  padding: calc(18px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+  padding: calc(18px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
   position: relative;
   z-index: 1;
   min-height: 100dvh;
