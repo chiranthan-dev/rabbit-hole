@@ -50,6 +50,22 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
 }
+
+/* App-like feel on phones: no double-tap zoom, no font inflation. */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iPhones zoom into any text field under 16px when you tap it. */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
 a {
   color: inherit;
 }

@@ -1,11 +1,14 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execSync } from 'node:child_process';
+import path from 'node:path';
 import { handleAccount, memoryKV, redisKV, type KV } from './api/account';
+import { fileKV } from './scripts/file-kv';
 
 // Serves /api/account during `npm run dev` / `npm run preview`, exactly like
 // the Vercel Function in production. Uses Upstash if its env vars are in
-// .env.local, otherwise an in-memory store (accounts reset when you restart).
+// .env.local; otherwise a local file (.data/local-db.json), so accounts and
+// data survive restarts on your machine. Tests use a fresh in-memory store.
 function localSyncApi(): Plugin {
   let kv: KV | null = null;
   const handler = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
@@ -27,7 +30,9 @@ function localSyncApi(): Plugin {
     name: 'local-sync-api',
     configResolved(config) {
       const env = loadEnv(config.mode, process.cwd(), '');
-      kv = redisKV(env) ?? memoryKV();
+      kv = redisKV(env) ?? (config.mode === 'test' ? memoryKV() : fileKV(path.resolve(config.root, '.data/local-db.json')));
+      if (config.command === 'serve' && config.mode !== 'test')
+        config.logger.info(`  ➜  Accounts: ${redisKV(env) ? 'Upstash (from .env.local)' : 'local file .data/local-db.json'}`);
     },
     configureServer(server) {
       server.middlewares.use(handler);

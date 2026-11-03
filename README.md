@@ -33,7 +33,7 @@ and get a researched 7‑day plan built for *understanding*, not box‑ticking.
 - [Features](#-features)
 - [How it works](#-how-it-works)
 - [On your phone](#-on-your-phone)
-- [Quick start](#-quick-start)
+- [Quick start](#-quick-start-on-your-own-machine)
 - [Deploy to Vercel](#-deploy-to-vercel)
 - [AI engines](#-ai-engines)
 - [Development](#-development)
@@ -170,6 +170,7 @@ Share the link, and anyone can **create an account** (name, email, password) or 
 <details>
 <summary><b>Everything else in v1</b></summary>
 
+- **Feels like an app on phones:** no accidental pinch or double-tap zoom, and no zoom-in when you tap a text box. The installed app updates itself when a new version is deployed. Settings shows the running version, with **Check for updates**.
 - **Up to 3 rabbit holes at once:** each has its own plan, time budget and progress. While you plan a new one, the wizard shows how many minutes your other holes already take each day, so you don't overload yourself. At 3, you're asked to finish or shelve one first; shelved holes can be resumed from the Journal.
 - **Past holes from the main screen:** the **Past** button next to the switcher (laptop and phone) lists shelved and finished holes. **Resume** a shelved one (its unfinished days are moved to start today) or open any of them to see your notes and recap. With no active hole, they're listed right on the main screen.
 - **Curiosity log:** park questions instead of getting derailed. Ask Claude about them, and turn any of them into next week's hole.
@@ -233,9 +234,11 @@ The **adventurousness** slider sets the mix. It learns from onboarding picks, �
 </tr>
 </table>
 
-## 🚀 Quick start
+## 🚀 Quick start (on your own machine)
 
-You need **Node 20+**.
+You need **[Node.js 20+](https://nodejs.org)** and **[Git](https://git-scm.com/downloads)**. The steps are the same on Windows, macOS and Linux.
+
+**1. Get the code** (into whichever folder you keep projects in):
 
 ```bash
 git clone https://github.com/chiranthan-dev/rabbit-hole.git
@@ -245,21 +248,79 @@ git clone https://github.com/chiranthan-dev/rabbit-hole.git
 cd rabbit-hole
 ```
 
+**2. Set up.** This one command checks Node, installs everything, creates `.env.local` and prints your links. It's safe to run again any time.
+
 ```bash
-npm install
+npm run setup
 ```
+
+**3. Run it:**
 
 ```bash
 npm run dev
 ```
 
-Open <http://localhost:5173>. The default engine is **Claude.ai copy & paste**, so nothing else is needed. Accounts work locally too, using an in-memory store that resets when you restart the server. To use your real database instead, put the Upstash variables in `.env.local`.
+Open <http://localhost:5173>. Your phone can use it too, on the same Wi-Fi: `npm run setup` prints the exact address, something like `http://192.168.x.x:5173`.
 
-To use a local model instead, run Ollama, then in **Settings** click **Detect local models** and **Test connection**:
+- **Accounts work locally with nothing to configure.** They're saved in `.data/local-db.json` (git-ignored), so they survive restarts.
+- **The default AI engine is Claude.ai copy & paste**, so nothing else is needed.
+- For a local model, install [Ollama](https://ollama.com) and run `ollama pull qwen2.5:7b`, then go to **Settings → AI engine → Detect local models**.
+
+<details>
+<summary><b>Make it your own project (own <code>main</code> branch, your Vercel)</b></summary>
+
+This repo was built on a branch called `claude/gallant-fermi-6ds0u0`. To make `main` your working branch, run these inside the folder:
 
 ```bash
-ollama pull qwen2.5:7b
+git checkout -b main
 ```
+
+```bash
+git push -u origin main
+```
+
+Then:
+1. On GitHub, go to **Settings → General → Default branch** and pick `main`.
+2. In Vercel, go to **Project → Settings → Git → Production Branch** and set it to `main`.
+3. Optionally, delete the old branch:
+
+```bash
+git push origin --delete claude/gallant-fermi-6ds0u0
+```
+
+From then on, `git push` to `main` deploys to your live link.
+
+</details>
+
+<details>
+<summary><b>Use your real (Vercel) accounts locally</b></summary>
+
+By default, local development uses its own local accounts. To work with the same database as your live site, pull the Upstash variables into `.env.local` (`.env.example` explains them):
+
+```bash
+npx vercel login
+```
+
+```bash
+npx vercel link
+```
+
+```bash
+npx vercel env pull .env.local
+```
+
+Restart `npm run dev`. The terminal will say **Accounts: Upstash**.
+
+</details>
+
+**Everyday commands**
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the app with live reload (port 5173) |
+| `npm run check` | Typecheck + tests + production build. Run it before pushing. |
+| `npm run preview` | Run the production build locally (port 4173) |
+| `git pull` then `npm install` | Get the latest changes |
 
 ## ☁️ Deploy to Vercel
 
@@ -340,6 +401,9 @@ src/
   pages/             Today, NewHole, Hole, Discover, History, You, Settings, Onboarding, Mobile, LinkDevice
   components/        Shell, TaskItem, HoleSwitcher, PastHoles, AccountPanel, ClaudeHandoff, widgets
   bits/              React Bits components
+scripts/
+  setup.mjs          npm run setup — one-command local setup
+  file-kv.ts         local accounts store for npm run dev (.data/local-db.json)
 docs/                README images and GIFs
 ```
 

@@ -5,3 +5,6 @@ dev-dist
 .DS_Store
 .vite
 *.tsbuildinfo
+
+# local accounts database for npm run dev (see scripts/file-kv.ts)
+.data

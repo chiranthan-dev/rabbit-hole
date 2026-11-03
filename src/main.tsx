@@ -19,6 +19,14 @@ registerSW({
   },
 });
 
+// No pinch-zoom on touch devices. iOS Safari ignores `user-scalable=no` in the
+// viewport tag, so block its gesture events (and two-finger pinches) directly.
+if (matchMedia('(pointer: coarse)').matches) {
+  const stop = (e: Event) => e.preventDefault();
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, stop, { passive: false });
+  document.addEventListener('touchmove', (e) => e.touches.length > 1 && e.preventDefault(), { passive: false });
+}
+
 // Note: no <StrictMode> — its dev-only double mount drops the WebGL
 // context of the animated background (React Bits Grainient).
 createRoot(document.getElementById('root')!).render(<App />);
