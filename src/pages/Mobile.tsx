@@ -15,6 +15,7 @@ import SpringCheck from '../bits/SpringCheck';
 import { resourceLinks } from '../lib/extras';
 import { SyncDot } from '../components/SyncPanel';
 import { cycleHole, HoleSwitcher } from '../components/HoleSwitcher';
+import { PastHolesList } from '../components/PastHoles';
 
 export default function Mobile() {
   const hole = useActiveHole();
@@ -26,6 +27,7 @@ export default function Mobile() {
   const tap = useRef<{ x: number; y: number; t: number } | null>(null);
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const multi = useStore((s) => s.holes.filter((h) => h.status === 'active').length > 1);
+  const hasPast = useStore((s) => s.holes.some((h) => h.status !== 'active'));
 
   if (!hole)
     return (
@@ -36,13 +38,21 @@ export default function Mobile() {
             <span>Rabbit Hole</span>
             <span className="muted">{prettyDate(isoDate())}</span>
           </div>
-          <div className="stack lg center" style={{ marginTop: '20vh' }}>
-            <h1 className="display sm">No hole yet.</h1>
-            <p className="grey small">Start a rabbit hole in the full app — today’s checklist will show up here.</p>
-            <Link to="/" className="btn primary" style={{ alignSelf: 'center' }}>
-              Open the full app
+          <div className="stack lg center" style={{ marginTop: hasPast ? '8vh' : '20vh' }}>
+            <h1 className="display sm">{hasPast ? 'No hole right now.' : 'No hole yet.'}</h1>
+            <p className="grey small">
+              {hasPast ? 'Resume one of your past holes below, or start a new one in the full app.' : 'Start a rabbit hole in the full app — today’s checklist will show up here.'}
+            </p>
+            <Link to={hasPast ? '/discover' : '/'} className="btn primary" style={{ alignSelf: 'center' }}>
+              {hasPast ? 'Find a new hole' : 'Open the full app'}
             </Link>
           </div>
+          {hasPast && (
+            <div className="stack" style={{ gap: 10, textAlign: 'left' }}>
+              <div className="h3">Your past holes</div>
+              <PastHolesList />
+            </div>
+          )}
         </div>
       </div>
     );

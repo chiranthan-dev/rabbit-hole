@@ -548,3 +548,16 @@ export const defaultBudgets = (perDay: number, weekendBoost = 0) => {
     return Math.max(0, perDay + (weekend ? weekendBoost : 0));
   });
 };
+
+/**
+ * When a shelved hole is resumed, slide the unfinished part of the week so it
+ * picks up today: finished days stay where they were, the first unfinished day
+ * becomes today. Holes that are on schedule (or ahead) are left untouched.
+ */
+export function rescheduleFromToday(hole: Hole, today = isoDate()): Hole {
+  let k = hole.days.findIndex((d) => d.tasks.some((t) => !t.done && !t.skipped && !t.optional));
+  if (k === -1) k = 6; // everything done — just reopen the last day
+  const newStart = addDays(today, -k);
+  if (newStart <= hole.startDate) return hole;
+  return { ...hole, startDate: newStart, days: hole.days.map((d, i) => ({ ...d, date: addDays(newStart, i) })) };
+}

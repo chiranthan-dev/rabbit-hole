@@ -16,7 +16,7 @@ import type {
   Understanding,
 } from './types';
 import { clamp, isoDate, uid } from './util';
-import { revisitTask } from './planner';
+import { rescheduleFromToday, revisitTask } from './planner';
 
 const AFFINITY_MIN = -3;
 const AFFINITY_MAX = 5;
@@ -196,7 +196,7 @@ export const useStore = create<State>()(
         resumeHole: (id) => {
           const s = get();
           if (activeCount(s.holes) >= MAX_ACTIVE) return false;
-          set({ holes: s.holes.map((h) => (h.id === id ? { ...h, status: 'active' } : h)), activeHoleId: id });
+          set({ holes: s.holes.map((h) => (h.id === id ? { ...rescheduleFromToday(h), status: 'active' } : h)), activeHoleId: id });
           return true;
         },
         patchTask: (holeId, taskId, patch) => upd(holeId, (h) => mapTasks(h, (t) => (t.id === taskId ? { ...t, ...patch } : t))),

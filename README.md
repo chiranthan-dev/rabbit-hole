@@ -14,7 +14,7 @@ and get a researched 7‑day plan built for *understanding*, not box‑ticking.
 [![Vite](https://img.shields.io/badge/Vite-161316?style=flat-square&logo=vite&logoColor=FF6D29)](https://vite.dev)
 [![PWA](https://img.shields.io/badge/Installable_PWA-161316?style=flat-square&logo=pwa&logoColor=FF6D29)](#-on-your-phone)
 [![Vercel](https://img.shields.io/badge/Vercel_+_Upstash-161316?style=flat-square&logo=vercel&logoColor=FF6D29)](#-deploy-to-vercel)
-[![Tests](https://img.shields.io/badge/tests-34_passing-161316?style=flat-square&logo=vitest&logoColor=FF6D29)](#-development)
+[![Tests](https://img.shields.io/badge/tests-37_passing-161316?style=flat-square&logo=vitest&logoColor=FF6D29)](#-development)
 
 **[▶ Open the live app](https://rabbit-hole-sooty-ten.vercel.app)** &nbsp;·&nbsp; [📱 Phone checklist](https://rabbit-hole-sooty-ten.vercel.app/m)
 
@@ -154,6 +154,7 @@ When you plan a new hole, every day shows the minutes your other holes already n
 <summary><b>Everything else in v1</b></summary>
 
 - **Up to 3 rabbit holes at once:** each has its own plan, time budget and progress. While you plan a new one, the wizard shows how many minutes your other holes already take each day, so you don't overload yourself. At 3, you're asked to finish or shelve one first; shelved holes can be resumed from the Journal.
+- **Past holes from the main screen:** the **Past** button next to the switcher (laptop and phone) lists shelved and finished holes. **Resume** a shelved one (its unfinished days are moved to start today) or open any of them to see your notes and recap. With no active hole, they're listed right on the main screen.
 - **Curiosity log:** park questions instead of getting derailed. Ask Claude about them, and turn any of them into next week's hole.
 - **Spaced revisits:** marking a task *Fuzzy* adds a 10‑minute revisit to the next day.
 - **Wrap-up:** reflect on the week, rate it, hold to close the hole, and get a recap from Claude. Your rating trains the recommender.

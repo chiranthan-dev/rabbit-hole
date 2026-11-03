@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { activeCount, canStartHole, MAX_ACTIVE, useStore } from '../store';
-import { offlineBrief, offlinePlan } from '../planner';
+import { offlineBrief, offlinePlan, rescheduleFromToday } from '../planner';
 import type { Hole } from '../types';
-import { isoDate } from '../util';
+import { addDays, isoDate } from '../util';
 
 const mk = (id: string): Hole => {
   const brief = offlineBrief(id);
@@ -75,5 +75,40 @@ describe('multiple rabbit holes', () => {
     const st = useStore.getState();
     expect(st.holes[0].days[0].tasks[0].done).toBe(true);
     expect(st.holes[1].days[0].tasks.some((t) => t.done)).toBe(false);
+  });
+});
+
+
+describe('resuming an old shelved hole', () => {
+  beforeEach(() => useStore.getState().resetAll());
+
+  it('slides unfinished days so the first one is today', () => {
+    const h = mk('old');
+    h.startDate = addDays(isoDate(), -20);
+    h.days = h.days.map((d, i) => ({ ...d, date: addDays(h.startDate, i) }));
+    h.days[0].tasks = h.days[0].tasks.map((t) => ({ ...t, done: true }));
+    h.days[1].tasks = h.days[1].tasks.map((t) => ({ ...t, done: true }));
+    const r = rescheduleFromToday(h);
+    expect(r.days[2].date).toBe(isoDate()); // first unfinished day = today
+    expect(r.days[0].date).toBe(addDays(isoDate(), -2));
+    expect(r.days[0].tasks.every((t) => t.done)).toBe(true);
+  });
+
+  it('leaves an on-schedule hole alone', () => {
+    const h = mk('now');
+    expect(rescheduleFromToday(h)).toBe(h);
+  });
+
+  it('resume via the store reschedules and focuses the hole', () => {
+    const s = useStore.getState();
+    const h = mk('old');
+    h.startDate = addDays(isoDate(), -30);
+    h.days = h.days.map((d, i) => ({ ...d, date: addDays(h.startDate, i) }));
+    s.addHole(h);
+    s.abandonHole('old');
+    expect(useStore.getState().resumeHole('old')).toBe(true);
+    const st = useStore.getState();
+    expect(st.activeHoleId).toBe('old');
+    expect(st.holes[0].days[0].date).toBe(isoDate());
   });
 });

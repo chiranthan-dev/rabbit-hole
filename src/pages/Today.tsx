@@ -11,6 +11,7 @@ import { clamp, fmtMinutes, greeting, isoDate, prettyDate } from '../lib/util';
 import type { Hole } from '../lib/types';
 import ShinyText from '../bits/ShinyText';
 import { HoleSwitcher } from '../components/HoleSwitcher';
+import { PastHolesList } from '../components/PastHoles';
 
 export default function Today() {
   const hole = useActiveHole();
@@ -24,6 +25,7 @@ function NoHole() {
   const holes = useStore((s) => s.holes);
   const recs = useMemo(() => recommend(profile, holes, { seed: Number(isoDate().replace(/-/g, '')), count: 3 }), [profile, holes]);
   const last = [...holes].reverse().find((h) => h.status !== 'active');
+  const hasPast = holes.some((h) => h.status !== 'active');
   return (
     <div className="stack xl">
       <section className="stack lg center" style={{ paddingTop: '6vh' }}>
@@ -49,6 +51,15 @@ function NoHole() {
           </button>
         </div>
       </section>
+      {hasPast && (
+        <section className="stack lg">
+          <div className="stack" style={{ gap: 4 }}>
+            <h2 className="h2">Pick up where you left off</h2>
+            <span className="small muted">Resume a shelved hole, or revisit a finished one.</span>
+          </div>
+          <PastHolesList limit={4} />
+        </section>
+      )}
       <section className="stack lg">
         <h2 className="h2">Today’s picks</h2>
         <div className="grid three">

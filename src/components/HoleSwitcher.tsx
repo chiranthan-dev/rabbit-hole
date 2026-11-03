@@ -2,6 +2,7 @@ import type React from 'react';
 import { Link } from 'react-router-dom';
 import { Add01Icon } from '@hugeicons/core-free-icons';
 import { Icon, Ring } from './ui';
+import { PastHolesButton } from './PastHoles';
 import { MAX_ACTIVE, useActiveHole, useActiveHoles, useStore } from '../lib/store';
 import { dayProgress, todayIndex } from '../lib/planner';
 import { domainEmoji } from '../lib/catalog';
@@ -39,9 +40,12 @@ export function HoleSwitcher({ compact = false, newHref = '/new' }: { compact?: 
 
   return (
     <div className="stack" style={{ gap: 8 }}>
-      <div className="row between tiny muted">
-        <span>
-          Your holes · {holes.length}/{MAX_ACTIVE}
+      <div className="row between tiny muted" style={{ gap: 8 }}>
+        <span className="row" style={{ gap: 8 }}>
+          <span>
+            Your holes · {holes.length}/{MAX_ACTIVE}
+          </span>
+          <PastHolesButton label="Past" />
         </span>
         {holes.length > 1 && <span>{totalLeft ? `${fmtMinutes(totalLeft)} left today across all` : 'All done today ✦'}</span>}
       </div>

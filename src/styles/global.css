@@ -1057,3 +1057,30 @@ input[type='range']::-moz-range-thumb {
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* ---------- past holes ---------- */
+.past-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--pill);
+  border: 1px solid var(--line);
+  background: rgba(22, 19, 22, 0.45);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    border-color 0.2s;
+}
+.past-btn:hover {
+  color: var(--white);
+  border-color: var(--line-strong);
+}
+.past-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
