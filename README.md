@@ -16,6 +16,8 @@ and get a researched 7‑day plan built for *understanding*, not box‑ticking.
 [![Vercel](https://img.shields.io/badge/Vercel_+_Upstash-161316?style=flat-square&logo=vercel&logoColor=FF6D29)](#-deploy-to-vercel)
 [![Tests](https://img.shields.io/badge/tests-34_passing-161316?style=flat-square&logo=vitest&logoColor=FF6D29)](#-development)
 
+**[▶ Open the live app](https://rabbit-hole-sooty-ten.vercel.app)** &nbsp;·&nbsp; [📱 Phone checklist](https://rabbit-hole-sooty-ten.vercel.app/m)
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fchiranthan-dev%2Frabbit-hole)
 
 <img src="docs/hero.jpg" alt="Rabbit Hole on desktop and phone" width="100%" />
