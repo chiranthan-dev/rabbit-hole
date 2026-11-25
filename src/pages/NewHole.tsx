@@ -375,7 +375,7 @@ export default function NewHole() {
           {aiEnabled(ai) && !error && (
             <div className="tiny faint">Local models can take a minute or two for a full week — each day is planned separately so it fits your time.</div>
           )}
-          {error && <div className="code">{error}</div>}
+          {error && <div className="notice bad">{error}</div>}
           <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
             {error ? (
               <>

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { handleAccount, memoryKV, type KV } from '../../../api/account';
+import { createECDH, randomBytes } from 'node:crypto';
+import { handleAccount, localClock, memoryKV, reminderFor, type Deps, type KV, type PushRequest } from '../../../api/account';
 
 type Jar = { cookie?: string };
-const call = async (kv: KV, jar: Jar, method: string, op: string, body?: unknown, ip = '1.1.1.1') => {
+const call = async (kv: KV, jar: Jar, method: string, op: string, body?: unknown, ip = '1.1.1.1', deps: Deps = {}) => {
   const res = await handleAccount(
     new Request(`https://rh.test/api/account?op=${op}`, {
       method,
@@ -10,6 +11,7 @@ const call = async (kv: KV, jar: Jar, method: string, op: string, body?: unknown
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
     kv,
+    deps,
   );
   const set = res.headers.get('set-cookie');
   if (set) jar.cookie = set.split(';')[0].endsWith('=') ? undefined : set.split(';')[0];
@@ -121,5 +123,136 @@ describe('accounts', () => {
     expect((await call(kv, c, 'POST', 'delete', { password: 'correct horse' })).status).toBe(200);
     expect((await call(kv, {}, 'POST', 'login', { email: 'ana@example.com', password: 'correct horse' })).status).toBe(401);
     expect((await signup(kv, {})).status).toBe(201); // email is free again
+  });
+});
+
+
+// ------------------------------------------------------------------ notifications
+
+/** A browser-like push subscription with real keys, so web-push can encrypt to it. */
+const fakeSubscription = (n = 1) => {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { endpoint: `https://push.example.com/send/${n}`, keys: { p256dh: ecdh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') } };
+};
+
+const today = (tz: string, d: Date) => localClock(tz, d).date;
+const dataWithTasks = (date: string) => ({
+  holes: [
+    {
+      id: 'h1',
+      title: 'Training for an Ironman',
+      status: 'active',
+      days: [{ date, tasks: [{ title: 'Do a mini brick', minutes: 30 }, { title: 'Lab notes', minutes: 10 }, { title: 'Done one', minutes: 20, done: true }, { title: 'Bonus', minutes: 15, optional: true }] }],
+    },
+  ],
+});
+
+describe('notifications', () => {
+  it('creates push keys once and serves the public key', async () => {
+    const kv = memoryKV();
+    const a = (await call(kv, {}, 'GET', 'push-config')).body.publicKey;
+    const b = (await call(kv, {}, 'GET', 'push-config')).body.publicKey;
+    expect(a).toMatch(/^[A-Za-z0-9_-]{80,}$/);
+    expect(b).toBe(a);
+  });
+
+  it('needs an account and a valid subscription', async () => {
+    const kv = memoryKV();
+    expect((await call(kv, {}, 'POST', 'push-subscribe', { subscription: fakeSubscription(), tz: 'Asia/Kolkata', time: '19:00' })).status).toBe(401);
+    const jar: Jar = {};
+    await signup(kv, jar);
+    expect((await call(kv, jar, 'POST', 'push-subscribe', { subscription: { endpoint: 'http://insecure', keys: {} }, tz: 'UTC', time: '19:00' })).status).toBe(400);
+    const sub = fakeSubscription();
+    expect((await call(kv, jar, 'POST', 'push-subscribe', { subscription: sub, tz: 'Asia/Kolkata', time: '19:30' })).body).toMatchObject({ ok: true, tz: 'Asia/Kolkata', time: '19:30' });
+    expect((await call(kv, jar, 'POST', 'push-status', { endpoint: sub.endpoint })).body).toMatchObject({ subscribed: true, devices: 1, time: '19:30' });
+  });
+
+  it('sends a test notification as an encrypted Web Push request', async () => {
+    const kv = memoryKV();
+    const jar: Jar = {};
+    await signup(kv, jar);
+    await call(kv, jar, 'POST', 'push-subscribe', { subscription: fakeSubscription(), tz: 'UTC', time: '19:00' });
+    const sent: PushRequest[] = [];
+    const r = await call(kv, jar, 'POST', 'push-test', {}, '1.1.1.1', { send: async (req) => (sent.push(req), 201) });
+    expect(r.body).toEqual({ sent: 1, failed: 0 });
+    expect(sent[0].endpoint).toBe('https://push.example.com/send/1');
+    expect(sent[0].headers.Authorization).toMatch(/^vapid t=/);
+    expect(sent[0].headers['Content-Encoding']).toBe('aes128gcm');
+  });
+
+  it('sends the daily reminder once, after the chosen local time, with today’s tasks', async () => {
+    const kv = memoryKV();
+    const jar: Jar = {};
+    await signup(kv, jar);
+    await call(kv, jar, 'POST', 'push-subscribe', { subscription: fakeSubscription(), tz: 'Asia/Kolkata', time: '19:00' });
+    // 13:00 UTC = 18:30 in India → too early; 13:40 UTC = 19:10 → due
+    const early = new Date('2026-11-25T13:00:00Z');
+    const due = new Date('2026-11-25T13:40:00Z');
+    await call(kv, jar, 'PUT', 'data', { baseVersion: 0, data: dataWithTasks(today('Asia/Kolkata', due)) });
+    const payloads: string[] = [];
+    const deps = (now: Date): Deps => ({ now: () => now, send: async () => (payloads.push('x'), 201) });
+    const run = async (now: Date) => {
+      await kv.del('rh:cron:lock'); // the throttle is per few minutes; reset it between simulated runs
+      return (await call(kv, {}, 'POST', 'cron', undefined, '1.1.1.1', deps(now))).body;
+    };
+    expect(await run(early)).toEqual({ checked: 1, sent: 0 });
+    expect(await run(due)).toEqual({ checked: 1, sent: 1 });
+    expect(await run(new Date('2026-11-25T14:30:00Z'))).toEqual({ checked: 1, sent: 0 }); // once a day
+  });
+
+  it('throttles the schedule endpoint', async () => {
+    const kv = memoryKV();
+    expect((await call(kv, {}, 'POST', 'cron')).body).toMatchObject({ checked: 0 });
+    expect((await call(kv, {}, 'POST', 'cron')).body).toEqual({ skipped: true });
+  });
+
+  it('forgets devices the push service says are gone', async () => {
+    const kv = memoryKV();
+    const jar: Jar = {};
+    await signup(kv, jar);
+    const sub = fakeSubscription();
+    await call(kv, jar, 'POST', 'push-subscribe', { subscription: sub, tz: 'UTC', time: '19:00' });
+    await call(kv, jar, 'POST', 'push-test', {}, '1.1.1.1', { send: async () => 410 });
+    expect((await call(kv, jar, 'POST', 'push-status', { endpoint: sub.endpoint })).body).toMatchObject({ subscribed: false, devices: 0 });
+    expect(await kv.smembers('rh:pushusers')).toEqual([]);
+  });
+
+  it('unsubscribe and account deletion remove push data', async () => {
+    const kv = memoryKV();
+    const jar: Jar = {};
+    await signup(kv, jar);
+    const sub = fakeSubscription();
+    await call(kv, jar, 'POST', 'push-subscribe', { subscription: sub, tz: 'UTC', time: '19:00' });
+    await call(kv, jar, 'POST', 'push-unsubscribe', { endpoint: sub.endpoint });
+    expect(await kv.smembers('rh:pushusers')).toEqual([]);
+    await call(kv, jar, 'POST', 'push-subscribe', { subscription: sub, tz: 'UTC', time: '19:00' });
+    await call(kv, jar, 'POST', 'delete', { password: 'correct horse' });
+    expect(await kv.smembers('rh:pushusers')).toEqual([]);
+  });
+});
+
+describe('reminder text', () => {
+  it('names the hole, what is left and the next task', () => {
+    const r = reminderFor(dataWithTasks('2026-11-25'), '2026-11-25', 3)!;
+    expect(r.title).toBe('Training for an Ironman');
+    expect(r.body).toBe('2 tasks left today · 40 min. Next: Do a mini brick');
+  });
+  it('summarises several holes', () => {
+    const d = dataWithTasks('2026-11-25');
+    d.holes.push({ ...d.holes[0], id: 'h2', title: 'Cosmere' });
+    expect(reminderFor(d, '2026-11-25', 3)!.body).toBe('Training for an Ironman: 2 left · Cosmere: 2 left — 80 min in all');
+  });
+  it('nudges a wrap-up when the week is over, and stays quiet when all is done', () => {
+    expect(reminderFor(dataWithTasks('2026-11-20'), '2026-11-25', 3)!.tag).toBe('wrapup');
+    const done = dataWithTasks('2026-11-25');
+    done.holes[0].days[0].tasks.forEach((t) => ((t as { done?: boolean }).done = true));
+    expect(reminderFor(done, '2026-11-25', 3)).toBeNull();
+  });
+  it('suggests a new hole on Sundays only when none is running', () => {
+    const idle = { holes: [{ id: 'x', title: 'Old', status: 'completed', days: [] }] };
+    expect(reminderFor(idle, '2026-11-29', 0)!.tag).toBe('weekly');
+    expect(reminderFor(idle, '2026-11-25', 3)).toBeNull();
+    expect(reminderFor({ holes: [] }, '2026-11-29', 0)).toBeNull();
   });
 });

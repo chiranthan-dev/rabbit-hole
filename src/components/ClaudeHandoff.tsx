@@ -106,7 +106,7 @@ export function ClaudeHandoff({
             />
           </div>
           {error && (
-            <div className="code" style={{ borderColor: 'rgba(255,155,155,.5)' }}>
+            <div className="notice bad">
               {error}
             </div>
           )}

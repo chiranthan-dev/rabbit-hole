@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Rabbit Hole \u2014 one topic, one week, real understanding.",
+  "description": "Rabbit Hole — one topic, one week, real understanding.",
   "engines": {
     "node": ">=20"
   },
@@ -26,12 +26,14 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
+    "web-push": "^4.0.0",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^6.2.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.5",

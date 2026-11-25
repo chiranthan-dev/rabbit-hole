@@ -12,6 +12,7 @@ import type { Hole } from '../lib/types';
 import ShinyText from '../bits/ShinyText';
 import { HoleSwitcher } from '../components/HoleSwitcher';
 import { PastHolesList } from '../components/PastHoles';
+import { ReminderNudge } from '../components/Notifications';
 
 export default function Today() {
   const hole = useActiveHole();
@@ -107,6 +108,7 @@ function ActiveToday({ hole }: { hole: Hole }) {
 
   return (
     <div className="stack xl">
+      <ReminderNudge />
       <HoleSwitcher />
       <section className="stack" style={{ gap: 10 }}>
         <div className="eyebrow">

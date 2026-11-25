@@ -14,7 +14,7 @@ and get a researched 7‑day plan built for *understanding*, not box‑ticking.
 [![Vite](https://img.shields.io/badge/Vite-161316?style=flat-square&logo=vite&logoColor=FF6D29)](https://vite.dev)
 [![PWA](https://img.shields.io/badge/Installable_PWA-161316?style=flat-square&logo=pwa&logoColor=FF6D29)](#-on-your-phone)
 [![Vercel](https://img.shields.io/badge/Vercel_+_Upstash-161316?style=flat-square&logo=vercel&logoColor=FF6D29)](#-deploy-to-vercel)
-[![Tests](https://img.shields.io/badge/tests-41_passing-161316?style=flat-square&logo=vitest&logoColor=FF6D29)](#-development)
+[![Tests](https://img.shields.io/badge/tests-52_passing-161316?style=flat-square&logo=vitest&logoColor=FF6D29)](#-development)
 
 **[▶ Open the live app](https://rabbit-hole-sooty-ten.vercel.app)** &nbsp;·&nbsp; [📱 Phone checklist](https://rabbit-hole-sooty-ten.vercel.app/m)
 
@@ -72,7 +72,7 @@ Your day's checklist with a focus timer on every task. The **switcher** at the t
 <td width="50%" valign="top">
 
 **🧭 Discover**<br/>
-119 hand-picked topics across 20 areas: self-growth, fictional worlds, endurance training, science, history, music and more. Each pick is labelled *Down your alley*, *One hop over* or *Wildcard*, with the reason it was chosen.
+149 hand-picked topics across 20 areas: self-growth, fictional worlds, endurance training, science, history, music, and niche corners like coffee, chocolate, mechanical watches, bioluminescence and the Voynich manuscript. Each pick is labelled *Down your alley*, *One hop over* or *Wildcard*, with the reason it was chosen.
 
 </td>
 </tr>
@@ -166,6 +166,15 @@ Share the link, and anyone can **create an account** (name, email, password) or 
 </td>
 </tr>
 </table>
+
+### 🔔 Notifications
+
+Turn on a **daily reminder** in **Settings → Notifications** (or from the card on Today) and pick a time. On days with something left, you'll get a nudge like *"Training for an Ironman — 2 tasks left today · 40 min. Next: Do a mini brick"*. If you're in several holes, it sums them up. When a week ends, you get a reminder to wrap it up. Tapping a notification opens the right screen.
+
+- **Works when the app is closed.** It uses real Web Push: Chrome, Edge, Firefox, Android, and iPhone/iPad (iOS 16.4+, from the home-screen app).
+- **No setup.** The server creates its own push keys on first use and stores them in your Upstash database.
+- **Timing:** `.github/workflows/reminders.yml` asks the app every 15 minutes who's due, in each person's own time zone, and never sends anyone more than one reminder a day. It runs free on GitHub Actions. Optionally, set `CRON_SECRET` in Vercel and as a GitHub secret to lock that endpoint.
+- **Shared devices stay private:** logging out turns off reminders on that device.
 
 <details>
 <summary><b>Everything else in v1</b></summary>
@@ -389,7 +398,7 @@ api/
   account.ts         Vercel Function: accounts, sessions, per-user data (Upstash Redis)
 src/
   lib/
-    catalog.ts       119 curated topics, 20 areas
+    catalog.ts       149 curated topics, 20 areas
     planner.ts       learning arc, time fitting, offline planner, rebalance, revisits
     recommend.ts     the interest / serendipity algorithm
     manual.ts        Claude copy & paste: prompts + importer
@@ -422,7 +431,7 @@ Built from a brand sheet: ink `#161316`, brown `#453027`, orange `#FF6D29`, grey
 - [x] Accounts: sign up, log in on any device, recovery codes
 - [x] Up to 3 rabbit holes at once, with a switcher on laptop and phone
 - [ ] Password reset by email and "Sign in with Google" (needs an email/OAuth provider)
-- [ ] Reminders and notifications
+- [x] Daily reminder notifications
 - [ ] Share a finished hole as a public page
 - [ ] Streak-friendly home-screen widget
 

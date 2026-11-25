@@ -853,10 +853,14 @@ function JournalTab({ hole }: { hole: Hole }) {
     <div className="stack lg">
       {entries.map((d) => (
         <div key={d.index} className="card stack">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="tag orange">Day {d.index + 1}</span>
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <span className="tag orange" style={{ flex: 'none' }}>
+                Day {d.index + 1}
+              </span>
+              <span className="small faint">{prettyDate(d.date)}</span>
+            </div>
             <span className="h3">{d.theme}</span>
-            <span className="small faint">{prettyDate(d.date)}</span>
           </div>
           {d.reflection && <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{d.reflection}</p>}
           {d.tasks
@@ -959,13 +963,25 @@ function FinishTab({ hole }: { hole: Hole }) {
           <input className="input" value={still} onChange={(e) => setStill(e.target.value)} />
         </label>
         <div className="row wrap between">
-          <div className="row" style={{ gap: 6 }}>
-            <span className="small muted">How good was this hole?</span>
-            {([1, 2, 3, 4, 5] as const).map((n) => (
-              <button key={n} className="btn icon sm ghost" aria-label={`${n} stars`} onClick={() => setRating(n)} style={{ color: n <= rating ? '#FF6D29' : 'rgba(255,255,255,.3)', fontSize: 18 }}>
-                ★
-              </button>
-            ))}
+          <div className="row wrap" style={{ gap: 6 }}>
+            <span className="small muted" style={{ flexBasis: 'auto', marginRight: 4 }}>
+              How good was this hole?
+            </span>
+            <span className="row" style={{ gap: 2, flex: 'none' }} role="radiogroup" aria-label="Rating">
+              {([1, 2, 3, 4, 5] as const).map((n) => (
+                <button
+                  key={n}
+                  role="radio"
+                  aria-checked={n === rating}
+                  className="btn icon sm ghost"
+                  aria-label={`${n} star${n === 1 ? '' : 's'}`}
+                  onClick={() => setRating(n)}
+                  style={{ color: n <= rating ? '#FF6D29' : 'rgba(255,255,255,.3)', fontSize: 18, width: 30 }}
+                >
+                  ★
+                </button>
+              ))}
+            </span>
           </div>
           <button className={`chip${wantMore ? ' on' : ''}`} onClick={() => setWantMore((w) => !w)}>
             {wantMore ? '✓ ' : ''}I want to go deeper on this

@@ -16,9 +16,19 @@
 //   GET  /api/account?op=data                                   → {version, updatedAt, data}
 //   PUT  /api/account?op=data     {baseVersion, data}           → {version, updatedAt} | 409 {…server copy}
 //   GET  /api/account?op=ping                                   → {ok, configured}
+//
+//   Notifications (Web Push; keys are created automatically and kept in Redis):
+//   GET  /api/account?op=push-config                            → {publicKey}
+//   POST /api/account?op=push-subscribe {subscription, tz, time} → {ok}
+//   POST /api/account?op=push-status    {endpoint}              → {subscribed, devices, time, tz, daily}
+//   POST /api/account?op=push-prefs     {tz?, time?, daily?}    → {ok}
+//   POST /api/account?op=push-unsubscribe {endpoint}            → {ok}
+//   POST /api/account?op=push-test                              → {sent, failed}
+//   POST /api/account?op=cron     (run by a schedule)           → {checked, sent}
 
 import { Redis } from '@upstash/redis';
 import { randomBytes, scrypt as scryptCb, timingSafeEqual, createHash } from 'node:crypto';
+import { generateRequestDetails, generateVAPIDKeys } from 'web-push';
 
 // ------------------------------------------------------------------ storage
 
@@ -29,6 +39,9 @@ export interface KV {
   del(key: string): Promise<void>;
   /** Increment a counter, starting its expiry window on first use. */
   incr(key: string, windowSec: number): Promise<number>;
+  sadd(key: string, member: string): Promise<void>;
+  srem(key: string, member: string): Promise<void>;
+  smembers(key: string): Promise<string[]>;
 }
 
 export function redisKV(env: Record<string, string | undefined> = process.env): KV | null {
@@ -51,6 +64,13 @@ export function redisKV(env: Record<string, string | undefined> = process.env): 
       if (n === 1) await redis.expire(k, w);
       return n;
     },
+    sadd: async (k, m) => {
+      await redis.sadd(k, m);
+    },
+    srem: async (k, m) => {
+      await redis.srem(k, m);
+    },
+    smembers: (k) => redis.smembers(k),
   };
 }
 
@@ -84,6 +104,15 @@ export function memoryKV(): KV {
       m.set(k, { v: JSON.stringify(n), exp: e?.exp ?? Date.now() + w * 1000 });
       return n;
     },
+    sadd: async (k, x) => {
+      const cur: string[] = live(k) ? JSON.parse(m.get(k)!.v) : [];
+      if (!cur.includes(x)) m.set(k, { v: JSON.stringify([...cur, x]) });
+    },
+    srem: async (k, x) => {
+      const cur: string[] = live(k) ? JSON.parse(m.get(k)!.v) : [];
+      m.set(k, { v: JSON.stringify(cur.filter((y) => y !== x)) });
+    },
+    smembers: async (k) => (live(k) ? JSON.parse(m.get(k)!.v) : []),
   };
 }
 
@@ -117,6 +146,11 @@ const k = {
   sess: (hash: string) => `rh:sess:${hash}`,
   data: (id: string) => `rh:data:${id}`,
   rl: (what: string, who: string) => `rh:rl:${what}:${who}`,
+  push: (id: string) => `rh:push:${id}`,
+  pushUsers: 'rh:pushusers',
+  pushSent: (id: string, date: string) => `rh:pushsent:${id}:${date}`,
+  vapid: 'rh:vapid',
+  cronLock: 'rh:cron:lock',
 };
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -200,9 +234,175 @@ async function limited(kv: KV, what: string, who: string, max: number, windowSec
   return (await kv.incr(k.rl(what, who), windowSec)) > max;
 }
 
+
+// ------------------------------------------------------------------ notifications (Web Push)
+
+interface PushSub {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  createdAt: string;
+}
+interface PushPrefs {
+  subs: PushSub[];
+  tz: string;
+  time: string; // "HH:MM", local to tz
+  daily: boolean;
+}
+/** Everything needed to send one push, built offline by web-push. */
+export interface PushRequest {
+  endpoint: string;
+  method: string;
+  headers: Record<string, string>;
+  body: Uint8Array | Buffer | string | null;
+}
+export interface Deps {
+  /** Deliver a push; returns the push service's HTTP status. Swappable in tests. */
+  send?: (r: PushRequest) => Promise<number>;
+  now?: () => Date;
+}
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const validTz = (tz: unknown) => {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return 'UTC';
+  }
+};
+
+/** Local date ("2026-11-25"), time ("19:05") and weekday (0 = Sunday) in a time zone. */
+export function localClock(tz: string, now: Date) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value]),
+  );
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}`, weekday };
+}
+
+interface LiteTask { title?: string; done?: boolean; skipped?: boolean; optional?: boolean; minutes?: number }
+interface LiteHole { id?: string; title?: string; status?: string; days?: { date?: string; tasks?: LiteTask[] }[] }
+
+/** What today's reminder should say, from the user's saved data. Null = nothing worth a nudge. */
+export function reminderFor(data: unknown, today: string, weekday: number): { title: string; body: string; url: string; tag: string } | null {
+  const holes: LiteHole[] = Array.isArray((data as { holes?: unknown })?.holes) ? (data as { holes: LiteHole[] }).holes : [];
+  const active = holes.filter((h) => h?.status === 'active');
+  const plans = active
+    .map((h) => {
+      const day = (h.days ?? []).find((d) => d?.date === today);
+      const left = (day?.tasks ?? []).filter((t) => !t.done && !t.skipped && !t.optional);
+      return { h, left, minutes: left.reduce((sum, t) => sum + (Number(t.minutes) || 0), 0) };
+    })
+    .filter((p) => p.left.length);
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  if (plans.length === 1) {
+    const { h, left, minutes } = plans[0];
+    return {
+      title: h.title || 'Rabbit Hole',
+      body: `${plural(left.length, 'task')} left today · ${minutes} min. Next: ${left[0].title ?? 'your next task'}`,
+      url: '/m',
+      tag: 'daily',
+    };
+  }
+  if (plans.length > 1) {
+    const total = plans.reduce((sum, p) => sum + p.minutes, 0);
+    return {
+      title: 'Your rabbit holes today',
+      body: `${plans.map((p) => `${p.h.title}: ${p.left.length} left`).join(' · ')} — ${total} min in all`,
+      url: '/m',
+      tag: 'daily',
+    };
+  }
+  const finished = active.find((h) => {
+    const last = h.days?.[h.days.length - 1]?.date;
+    return last && last < today;
+  });
+  if (finished)
+    return { title: `Your week in ${finished.title} is done`, body: 'Wrap it up: see what you now understand and where it could lead next.', url: `/hole/${finished.id}?tab=finish`, tag: 'wrapup' };
+  if (!active.length && holes.length && weekday === 0)
+    return { title: 'Ready for a new rabbit hole?', body: 'A fresh week starts tomorrow. Discover has new ideas waiting.', url: '/discover', tag: 'weekly' };
+  return null;
+}
+
+async function vapidKeys(kv: KV, req: Request) {
+  const subject = process.env.VAPID_SUBJECT || `https://${new URL(req.url).host}`;
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+    return { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY, subject };
+  let keys = await kv.get<{ publicKey: string; privateKey: string }>(k.vapid);
+  if (!keys) {
+    // First use: create this app's push identity once and keep it.
+    const fresh = generateVAPIDKeys();
+    await kv.set(k.vapid, fresh, { nx: true });
+    keys = (await kv.get<{ publicKey: string; privateKey: string }>(k.vapid)) ?? fresh;
+  }
+  return { ...keys, subject };
+}
+
+const defaultSend = async (r: PushRequest) => {
+  const res = await fetch(r.endpoint, { method: r.method, headers: r.headers, body: r.body as BodyInit | null });
+  return res.status;
+};
+
+/** Send one notification to every device of a user; forgets devices the push service says are gone. */
+async function pushToUser(kv: KV, req: Request, uid: string, payload: object, deps: Deps) {
+  const prefs = await kv.get<PushPrefs>(k.push(uid));
+  if (!prefs?.subs.length) return { sent: 0, failed: 0 };
+  const vapid = await vapidKeys(kv, req);
+  const send = deps.send ?? defaultSend;
+  let sent = 0;
+  let failed = 0;
+  const gone: string[] = [];
+  await Promise.all(
+    prefs.subs.map(async (sub) => {
+      try {
+        const d = generateRequestDetails({ endpoint: sub.endpoint, keys: sub.keys }, JSON.stringify(payload), {
+          vapidDetails: { subject: vapid.subject, publicKey: vapid.publicKey, privateKey: vapid.privateKey },
+          TTL: 4 * 3600,
+        });
+        const status = await send({ endpoint: d.endpoint, method: d.method, headers: d.headers as Record<string, string>, body: d.body as Buffer | null });
+        if (status === 404 || status === 410) gone.push(sub.endpoint);
+        if (status >= 200 && status < 300) sent++;
+        else failed++;
+      } catch (e) {
+        console.error('push failed', e);
+        failed++;
+      }
+    }),
+  );
+  if (gone.length) {
+    const fresh = { ...prefs, subs: prefs.subs.filter((s) => !gone.includes(s.endpoint)) };
+    await kv.set(k.push(uid), fresh);
+    if (!fresh.subs.length) await kv.srem(k.pushUsers, uid);
+  }
+  return { sent, failed };
+}
+
+/** Send every reminder that is due. Safe to call often: each user gets at most one a day. */
+async function runReminders(kv: KV, req: Request, deps: Deps) {
+  const now = (deps.now ?? (() => new Date()))();
+  const uids = await kv.smembers(k.pushUsers);
+  let sent = 0;
+  for (const uid of uids) {
+    const prefs = await kv.get<PushPrefs>(k.push(uid));
+    if (!prefs?.daily || !prefs.subs.length) continue;
+    const clock = localClock(validTz(prefs.tz), now);
+    if (clock.time < prefs.time || clock.time >= '23:00') continue;
+    if (!(await kv.set(k.pushSent(uid, clock.date), 1, { nx: true, ex: 2 * 86400 }))) continue; // already handled today
+    const stored = await kv.get<{ data?: unknown }>(k.data(uid));
+    const msg = reminderFor(stored?.data, clock.date, clock.weekday);
+    if (!msg) continue;
+    sent += (await pushToUser(kv, req, uid, msg, deps)).sent;
+  }
+  return { checked: uids.length, sent };
+}
+
 // ------------------------------------------------------------------ handler
 
-export async function handleAccount(req: Request, kv: KV | null): Promise<Response> {
+export async function handleAccount(req: Request, kv: KV | null, deps: Deps = {}): Promise<Response> {
   const url = new URL(req.url);
   const op = url.searchParams.get('op') ?? '';
   if (op === 'ping') return json({ ok: true, configured: !!kv });
@@ -305,6 +505,8 @@ export async function handleAccount(req: Request, kv: KV | null): Promise<Respon
         const b = await body<{ password: string }>(req);
         if (!(await verifySecret(String(b.password ?? ''), cur.user.pass))) return fail(401, 'Wrong password.');
         await kv.del(k.data(cur.user.id));
+        await kv.del(k.push(cur.user.id));
+        await kv.srem(k.pushUsers, cur.user.id);
         await kv.del(k.email(cur.user.email));
         await kv.del(k.user(cur.user.id));
         await kv.del(k.sess(cur.tokenHash));
@@ -336,6 +538,98 @@ export async function handleAccount(req: Request, kv: KV | null): Promise<Respon
         const next: Stored = { version: v + 1, updatedAt: new Date().toISOString(), data: b.data };
         await kv.set(k.data(cur.user.id), next);
         return json({ version: next.version, updatedAt: next.updatedAt });
+      }
+
+
+      case 'GET push-config': {
+        const { publicKey } = await vapidKeys(kv, req);
+        return json({ publicKey });
+      }
+
+      case 'POST push-subscribe': {
+        const cur = await currentUser(req, kv);
+        if (!cur) return fail(401, 'Log in to turn on reminders.');
+        const b = await body<{ subscription: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; tz: string; time: string }>(req);
+        const sub = b.subscription;
+        let endpointOk = false;
+        try {
+          endpointOk = new URL(String(sub?.endpoint)).protocol === 'https:';
+        } catch {
+          endpointOk = false;
+        }
+        if (!endpointOk || !sub?.keys?.p256dh || !sub.keys.auth) return fail(400, 'That notification subscription isn’t valid.');
+        const prev = (await kv.get<PushPrefs>(k.push(cur.user.id))) ?? { subs: [], tz: 'UTC', time: '19:00', daily: true };
+        const entry: PushSub = { endpoint: sub.endpoint!, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, createdAt: new Date().toISOString() };
+        const prefs: PushPrefs = {
+          subs: [...prev.subs.filter((s2) => s2.endpoint !== entry.endpoint), entry].slice(-10),
+          tz: validTz(b.tz ?? prev.tz),
+          time: TIME_RE.test(String(b.time)) ? String(b.time) : prev.time,
+          daily: true,
+        };
+        await kv.set(k.push(cur.user.id), prefs);
+        await kv.sadd(k.pushUsers, cur.user.id);
+        return json({ ok: true, time: prefs.time, tz: prefs.tz });
+      }
+
+      case 'POST push-status': {
+        const cur = await currentUser(req, kv);
+        if (!cur) return fail(401, 'Not logged in.');
+        const b = await body<{ endpoint: string }>(req);
+        const prefs = await kv.get<PushPrefs>(k.push(cur.user.id));
+        return json({
+          subscribed: !!prefs?.subs.some((s2) => s2.endpoint === b.endpoint),
+          devices: prefs?.subs.length ?? 0,
+          time: prefs?.time ?? '19:00',
+          tz: prefs?.tz ?? null,
+          daily: prefs?.daily ?? false,
+        });
+      }
+
+      case 'POST push-prefs': {
+        const cur = await currentUser(req, kv);
+        if (!cur) return fail(401, 'Not logged in.');
+        const b = await body<{ tz: string; time: string; daily: boolean }>(req);
+        const prefs = await kv.get<PushPrefs>(k.push(cur.user.id));
+        if (!prefs) return fail(404, 'Reminders aren’t on for this account yet.');
+        if (b.time !== undefined && !TIME_RE.test(String(b.time))) return fail(400, 'Pick a time like 19:00.');
+        const next = { ...prefs, tz: b.tz ? validTz(b.tz) : prefs.tz, time: b.time ?? prefs.time, daily: b.daily ?? prefs.daily };
+        await kv.set(k.push(cur.user.id), next);
+        return json({ ok: true });
+      }
+
+      case 'POST push-unsubscribe': {
+        const cur = await currentUser(req, kv);
+        if (!cur) return fail(401, 'Not logged in.');
+        const b = await body<{ endpoint: string }>(req);
+        const prefs = await kv.get<PushPrefs>(k.push(cur.user.id));
+        if (prefs) {
+          const next = { ...prefs, subs: prefs.subs.filter((s2) => s2.endpoint !== b.endpoint) };
+          if (next.subs.length) await kv.set(k.push(cur.user.id), next);
+          else {
+            await kv.del(k.push(cur.user.id));
+            await kv.srem(k.pushUsers, cur.user.id);
+          }
+        }
+        return json({ ok: true });
+      }
+
+      case 'POST push-test': {
+        const cur = await currentUser(req, kv);
+        if (!cur) return fail(401, 'Not logged in.');
+        if (await limited(kv, 'push-test', cur.user.id, 10, 3600)) return fail(429, 'That’s plenty of tests for now — try again later.');
+        const prefs = await kv.get<PushPrefs>(k.push(cur.user.id));
+        const r = await pushToUser(kv, req, cur.user.id, { title: 'Notifications are on ✦', body: `You’ll get a nudge around ${prefs?.time ?? '19:00'} when there’s something left to do.`, url: '/', tag: 'test' }, deps);
+        return json(r);
+      }
+
+      case 'GET cron':
+      case 'POST cron': {
+        const secret = process.env.CRON_SECRET;
+        if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) return fail(401, 'Not allowed.');
+        // Without a secret anyone may poke this, so it runs at most every few minutes and
+        // never sends anyone more than one reminder a day.
+        if (!(await kv.set(k.cronLock, 1, { nx: true, ex: 240 }))) return json({ skipped: true });
+        return json(await runReminders(kv, req, deps));
       }
 
       default:

@@ -7,7 +7,9 @@ import { detectLocal, ollamaModels, openaiModels, testConnection } from '../lib/
 import type { AISettings, ProviderKind } from '../lib/types';
 import { downloadText, isoDate } from '../lib/util';
 import { AccountPanel } from '../components/AccountPanel';
+import { NotificationsPanel } from '../components/Notifications';
 import { versionLabel } from '../version';
+import { useAuth } from '../lib/auth';
 
 const PROVIDERS: { id: ProviderKind; label: string; text: string }[] = [
   { id: 'manual', label: 'Claude.ai — copy & paste', text: 'Recommended. Claude researches the web using your own Claude account; you paste its reply back. No keys, no cost, works on phone.' },
@@ -33,6 +35,7 @@ export default function Settings() {
   const importData = useStore((s) => s.importData);
   const resetAll = useStore((s) => s.resetAll);
   const nav = useNavigate();
+  const authStatus = useAuth((st) => st.status);
   const [models, setModels] = useState<string[]>([]);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -192,7 +195,7 @@ export default function Settings() {
         )}
         {busy && <div className="small muted">Talking to the model…</div>}
         {status && (
-          <div className="code" style={{ borderColor: status.ok ? 'rgba(143,214,148,.5)' : 'rgba(255,155,155,.5)' }}>
+          <div className={`notice ${status.ok ? 'good' : 'bad'}`}>
             {status.text}
           </div>
         )}
@@ -212,6 +215,8 @@ export default function Settings() {
       </section>
 
       <AccountPanel />
+
+      <NotificationsPanel />
 
       <section className="card stack lg">
         <div className="h2">You</div>
@@ -256,7 +261,11 @@ export default function Settings() {
       <section className="card stack lg">
         <div className="stack" style={{ gap: 4 }}>
           <div className="h2">Your data</div>
-          <div className="small muted">Everything lives in this browser. Export a backup (API keys are never included), or move it to another device.</div>
+          <div className="small muted">
+            {authStatus === 'in'
+              ? 'Your holes are saved to your account. You can also download a copy as a backup file (API keys are never included).'
+              : 'As a guest, everything lives only in this browser. Export a backup to keep it safe (API keys are never included), or create an account.'}
+          </div>
         </div>
         <div className="row wrap" style={{ gap: 8 }}>
           <button className="btn" onClick={() => downloadText(`rabbit-hole-backup-${isoDate()}.json`, exportData())}>

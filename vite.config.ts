@@ -83,7 +83,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       // Registered from src/main.tsx so we control update checks and reloads.
       injectRegister: false,
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'push-sw.js'],
       manifest: {
         name: 'Rabbit Hole',
         short_name: 'Rabbit Hole',
@@ -107,6 +107,8 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // Push notifications: show reminders and handle taps.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

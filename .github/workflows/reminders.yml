@@ -1,0 +1,31 @@
+# Sends Rabbit Hole's daily reminders.
+#
+# Every 15 minutes this asks the app to send any reminders that are due. The
+# app decides who is due (each person's chosen time, in their time zone) and
+# never sends anyone more than one reminder a day, so running often is safe.
+#
+# Settings (optional): Repository → Settings → Secrets and variables → Actions
+#   Variables: APP_URL      your app's address (defaults to the Vercel link below)
+#   Secrets:   CRON_SECRET  only if you also set CRON_SECRET in Vercel to lock the endpoint
+name: Reminders
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send due reminders
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://rabbit-hole-sooty-ten.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --max-time 90 -X POST "$APP_URL/api/account?op=cron" \
+            ${CRON_SECRET:+-H "Authorization: Bearer $CRON_SECRET"}
+          echo

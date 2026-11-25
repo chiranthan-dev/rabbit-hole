@@ -810,6 +810,12 @@ input[type='range']::-moz-range-thumb {
   white-space: nowrap;
   font-size: 14px;
 }
+@media (max-width: 520px) {
+  .tabs button {
+    padding: 8px 12px;
+    font-size: 13.5px;
+  }
+}
 .tabs button.on {
   background: var(--glass-strong);
   color: var(--white);
@@ -868,6 +874,31 @@ input[type='range']::-moz-range-thumb {
   padding: 10px 12px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.notice {
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--grey);
+  white-space: pre-wrap;
+}
+.notice.warn {
+  border-color: rgba(255, 192, 105, 0.45);
+  background: rgba(255, 192, 105, 0.07);
+  color: #ffd9a8;
+}
+.notice.bad {
+  border-color: rgba(255, 155, 155, 0.45);
+  background: rgba(255, 155, 155, 0.07);
+  color: #ffc9c9;
+}
+.notice.good {
+  border-color: rgba(143, 214, 148, 0.45);
+  background: rgba(143, 214, 148, 0.07);
+  color: #c9f0cb;
 }
 .link {
   color: #ffb48f;
@@ -938,6 +969,10 @@ input[type='range']::-moz-range-thumb {
   letter-spacing: -0.04em;
   font-weight: 400;
   line-height: 1;
+  white-space: nowrap;
+}
+.statnum.fit {
+  font-size: clamp(26px, 3.4vw, 40px);
 }
 .affbar {
   display: grid;

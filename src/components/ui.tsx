@@ -1,5 +1,5 @@
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
-import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
 
 export function Icon({ icon, size = 18, color = 'currentColor', stroke = 1.6 }: { icon: IconSvgElement; size?: number; color?: string; stroke?: number }) {
@@ -62,8 +62,17 @@ export function Toasts() {
 // ---------------- tabs ----------------
 
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { id: T; label: ReactNode }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // On narrow screens the tabs scroll sideways: keep the selected one in view.
+  useEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>('button.on');
+    const box = ref.current;
+    if (!el || !box) return;
+    const left = el.offsetLeft - box.offsetLeft;
+    if (left < box.scrollLeft || left + el.offsetWidth > box.scrollLeft + box.clientWidth) box.scrollTo({ left: left - 16, behavior: 'smooth' });
+  }, [value]);
   return (
-    <div className="tabs" role="tablist">
+    <div className="tabs" role="tablist" ref={ref}>
       {options.map((o) => (
         <button key={o.id} role="tab" aria-selected={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => onChange(o.id)}>
           {o.label}

@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { useStore } from './store';
 import { connect, disconnect, syncNow } from './sync';
+import { disableReminders, refreshSubscription } from './notify';
 
 export interface AccountUser {
   id: string;
@@ -54,6 +55,7 @@ function adopt(user: AccountUser) {
   useAuth.setState({ status: 'in', user, message: undefined });
   if (useStore.getState().sync.userId !== user.id) connect(user.id);
   else void syncNow();
+  void refreshSubscription();
 }
 
 /** Check the session on startup. */
@@ -100,6 +102,7 @@ export async function changePassword(current: string, next: string) {
 /** Log out and remove this account's data from this device (it stays safe in the account). */
 export async function logOut(everywhere = false) {
   await syncNow(); // save anything unsynced first
+  await disableReminders().catch(() => {}); // this device stops getting this account's reminders
   try {
     await call(everywhere ? 'logout-all' : 'logout', { body: {} });
   } catch {
@@ -112,6 +115,7 @@ export async function logOut(everywhere = false) {
 
 export async function deleteAccount(password: string) {
   await call('delete', { body: { password } });
+  await disableReminders().catch(() => {});
   disconnect();
   useStore.getState().resetAll();
   useAuth.setState({ status: 'out', user: null, message: undefined });

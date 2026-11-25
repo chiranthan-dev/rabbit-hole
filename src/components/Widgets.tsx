@@ -111,7 +111,7 @@ export function TopicCard({ s, onStart }: { s: Suggestion; onStart: (s: Suggesti
 export function StatTile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="card tight stack" style={{ gap: 6 }}>
-      <div className="statnum">{children}</div>
+      <div className="statnum fit">{children}</div>
       <div className="tiny muted">{label}</div>
     </div>
   );

@@ -49,5 +49,16 @@ export function fileKV(path: string): KV {
       save();
       return n;
     },
+    sadd: async (k, m) => {
+      const cur: string[] = live(k) ? JSON.parse(db[k].v) : [];
+      if (!cur.includes(m)) db[k] = { v: JSON.stringify([...cur, m]) };
+      save();
+    },
+    srem: async (k, m) => {
+      const cur: string[] = live(k) ? JSON.parse(db[k].v) : [];
+      db[k] = { v: JSON.stringify(cur.filter((x) => x !== m)) };
+      save();
+    },
+    smembers: async (k) => (live(k) ? JSON.parse(db[k].v) : []),
   };
 }

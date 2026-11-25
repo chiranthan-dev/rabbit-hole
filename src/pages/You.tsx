@@ -29,20 +29,20 @@ export default function You() {
       </div>
 
       <div className="grid four">
-        <StatTile label="holes completed">
+        <StatTile label={st.holesDone === 1 ? 'hole completed' : 'holes completed'}>
           <CountUp to={st.holesDone} />
         </StatTile>
         <StatTile label="time spent learning">{fmtMinutes(st.minutes)}</StatTile>
-        <StatTile label="tasks done">
+        <StatTile label={st.tasksDone === 1 ? 'task done' : 'tasks done'}>
           <CountUp to={st.tasksDone} />
         </StatTile>
-        <StatTile label="ideas you can explain">
+        <StatTile label={st.conceptsClear === 1 ? 'idea you can explain' : 'ideas you can explain'}>
           <CountUp to={st.conceptsClear} />
         </StatTile>
         <StatTile label="day streak">
           <CountUp to={st.streak} />
         </StatTile>
-        <StatTile label="questions raised">
+        <StatTile label={st.questions === 1 ? 'question raised' : 'questions raised'}>
           <CountUp to={st.questions} />
         </StatTile>
       </div>
